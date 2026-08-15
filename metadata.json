@@ -1,0 +1,6 @@
+{
+  "name": "Associação dos Instrutores de Trânsito Autônomos de Pernambuco (AIAPE)",
+  "description": "Sistema completo para gestão de associados, mensalidades, eventos, prestação de contas e fluxo de caixa da AIAPE (Pernambuco).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
