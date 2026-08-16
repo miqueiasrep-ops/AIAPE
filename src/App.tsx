@@ -623,6 +623,10 @@ export default function App() {
     setAssociates(updated);
     safeSetLocalStorage('assoc_associates', JSON.stringify(updated));
 
+    if (loggedAssociate && loggedAssociate.id === updatedAssoc.id) {
+      setLoggedAssociate(updatedAssoc);
+    }
+
     setSyncStatus('sincronizando');
     try {
       await setDoc(doc(db, 'associates', updatedAssoc.id), updatedAssoc, { merge: true });
@@ -801,6 +805,7 @@ export default function App() {
         onLogout={() => setLoggedAssociate(null)}
         onAddTransaction={handleAddTransaction}
         onRegisterPayment={handleRegisterPayment}
+        onUpdateAssociate={handleUpdateAssociate}
       />
     );
   }

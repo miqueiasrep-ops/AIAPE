@@ -29,7 +29,13 @@ import {
   Filter,
   Search,
   Check,
-  Building
+  Building,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff,
+  Save,
+  Shield
 } from 'lucide-react';
 import { 
   Associate, 
@@ -53,6 +59,7 @@ interface AssociatePortalProps {
   onSubmitRequest: (newReq: Omit<AssociateRequest, 'id' | 'createdAt' | 'status'>) => void;
   onAddTransaction?: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
   onRegisterPayment?: (associate: Associate, month: string, value: number, date: string, bank: string, attachmentUrl?: string, attachmentName?: string) => void;
+  onUpdateAssociate?: (associate: Associate) => Promise<void> | void;
 }
 
 export function AssociatePortal({
@@ -64,15 +71,71 @@ export function AssociatePortal({
   onLogout,
   onSubmitRequest,
   onAddTransaction,
-  onRegisterPayment
+  onRegisterPayment,
+  onUpdateAssociate
 }: AssociatePortalProps) {
-  const [activeTab, setActiveTab] = useState<'inicio' | 'solicitacoes' | 'beneficios' | 'aniversariantes' | 'financeiro' | 'comprovante' | 'carteirinha'>('inicio');
+  const [activeTab, setActiveTab] = useState<'inicio' | 'solicitacoes' | 'beneficios' | 'aniversariantes' | 'financeiro' | 'comprovante' | 'carteirinha' | 'senha'>('inicio');
   const [showNewRequestModal, setShowNewRequestModal] = useState(false);
   const [requestType, setRequestType] = useState<RequestType>('emprestimo');
   const [requestTitle, setRequestTitle] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
   const [requestAmount, setRequestAmount] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Password Change state
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [isSubmittingPass, setIsSubmittingPass] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    // If associate already had a password, verify current password
+    if (associate.password && currentPasswordInput.trim() && associate.password !== currentPasswordInput.trim()) {
+      setPasswordError('A senha atual informada está incorreta.');
+      return;
+    }
+
+    if (newPasswordInput.length < 4) {
+      setPasswordError('A nova senha deve possuir pelo menos 4 caracteres.');
+      return;
+    }
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordError('A confirmação da nova senha não é igual à nova senha digitada.');
+      return;
+    }
+
+    setIsSubmittingPass(true);
+    try {
+      const updatedAssoc: Associate = {
+        ...associate,
+        password: newPasswordInput.trim()
+      };
+
+      if (onUpdateAssociate) {
+        await onUpdateAssociate(updatedAssoc);
+      }
+
+      setPasswordSuccess('Sua senha de acesso foi alterada com sucesso! Guarde-a para seus próximos logins.');
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+    } catch (err) {
+      console.error('Erro ao alterar senha:', err);
+      setPasswordError('Ocorreu um erro ao atualizar a senha. Por favor, tente novamente.');
+    } finally {
+      setIsSubmittingPass(false);
+    }
+  };
 
   // Loan calculator state
   const [loanAmount, setLoanAmount] = useState<number>(3000);
@@ -243,10 +306,26 @@ export function AssociatePortal({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('carteirinha')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer"
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+                activeTab === 'carteirinha'
+                  ? 'bg-blue-600/30 text-blue-300 border-blue-500/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
             >
               <QrCode className="w-3.5 h-3.5 text-blue-400" />
               Carteirinha Digital
+            </button>
+            <button
+              onClick={() => setActiveTab('senha')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors cursor-pointer ${
+                activeTab === 'senha'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+              title="Alterar Senha de Acesso"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+              <span>Alterar Senha</span>
             </button>
             <button
               onClick={onLogout}
@@ -413,6 +492,18 @@ export function AssociatePortal({
           >
             <QrCode className="w-4 h-4" />
             Carteirinha Digital
+          </button>
+
+          <button
+            onClick={() => setActiveTab('senha')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+              activeTab === 'senha'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                : 'bg-slate-900 text-amber-300/90 hover:text-amber-200 hover:bg-slate-800 border border-amber-500/30'
+            }`}
+          >
+            <KeyRound className="w-4 h-4 text-amber-400" />
+            Alterar Senha
           </button>
         </div>
 
@@ -652,6 +743,28 @@ export function AssociatePortal({
                     ))}
                   </div>
                 )}
+                {/* Segurança e Alteração de Senha Widget */}
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-3 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <h3 className="text-xs font-black text-white flex items-center gap-2 uppercase tracking-wide">
+                      <KeyRound className="w-4 h-4 text-amber-400" />
+                      Segurança & Senha
+                    </h3>
+                    <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      Acesso Pessoal
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Deseja trocar sua senha de acesso? Mantenha sua conta sempre protegida em todos os seus aparelhos.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('senha')}
+                    className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Alterar Minha Senha de Acesso
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1129,6 +1242,235 @@ export function AssociatePortal({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 8: ALTERAÇÃO DE SENHA */}
+        {activeTab === 'senha' && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 border border-amber-900/40 rounded-3xl p-6 relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 right-0 translate-x-10 -translate-y-10 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold rounded-full">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    Segurança & Acesso Exclusivo
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    Alteração de Senha de Acesso
+                  </h2>
+                  <p className="text-xs text-slate-300">
+                    Defina uma nova senha para acessar o portal do associado em qualquer celular ou computador.
+                  </p>
+                </div>
+
+                <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-400 shrink-0">
+                  <Shield className="w-6 h-6" />
+                </div>
+              </div>
+            </div>
+
+            {/* Associate Info Chip */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl flex items-center justify-center font-bold text-sm">
+                  {associate.name.charAt(0)}
+                </div>
+                <div>
+                  <span className="font-bold text-white block">{associate.name}</span>
+                  <span className="text-slate-400 text-[11px]">{associate.category} • CPF: {associate.document || 'Não informado'}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-1 rounded-full">
+                  Status: {associate.status.toUpperCase()}
+                </span>
+              </div>
+            </div>
+
+            {/* Success Notification */}
+            <AnimatePresence>
+              {passwordSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-start gap-3 text-emerald-400 text-xs font-semibold shadow-lg"
+                >
+                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-emerald-300">Senha atualizada com sucesso!</p>
+                    <p className="text-emerald-400/90">{passwordSuccess}</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Error Notification */}
+            <AnimatePresence>
+              {passwordError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center gap-3 text-rose-400 text-xs font-semibold shadow-lg"
+                >
+                  <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+                  <span>{passwordError}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Password Change Form */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
+              <form onSubmit={handleChangePassword} className="space-y-5">
+                {/* Current Password Field */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-bold text-slate-200">
+                      Senha Atual
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      {associate.password ? 'Necessária para confirmação' : 'Opcional no primeiro acesso'}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPass ? 'text' : 'password'}
+                      value={currentPasswordInput}
+                      onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                      placeholder="Digite sua senha atual..."
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-3 pr-10 rounded-xl text-xs focus:outline-hidden focus:border-amber-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPass(!showCurrentPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 cursor-pointer"
+                      title={showCurrentPass ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* New Password Field */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-bold text-slate-200">
+                      Nova Senha *
+                    </label>
+                    <span className="text-[11px] text-amber-400/90 font-medium">
+                      Mínimo de 4 dígitos
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showNewPass ? 'text' : 'password'}
+                      required
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      placeholder="Digite sua nova senha..."
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-3 pr-10 rounded-xl text-xs focus:outline-hidden focus:border-amber-500 transition-colors font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPass(!showNewPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 cursor-pointer"
+                      title={showNewPass ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password Field */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-200 mb-1.5">
+                    Confirmar Nova Senha *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPass ? 'text' : 'password'}
+                      required
+                      value={confirmPasswordInput}
+                      onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                      placeholder="Repita a nova senha exatamente igual..."
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-3 pr-10 rounded-xl text-xs focus:outline-hidden focus:border-amber-500 transition-colors font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPass(!showConfirmPass)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 cursor-pointer"
+                      title={showConfirmPass ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password Match Helper Indicator */}
+                {newPasswordInput && confirmPasswordInput && (
+                  <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border ${
+                    newPasswordInput === confirmPasswordInput 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                  }`}>
+                    {newPasswordInput === confirmPasswordInput ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                        <span>As senhas coincidem perfeitamente.</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                        <span>As senhas digitadas ainda não conferem.</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Form Buttons */}
+                <div className="pt-3 flex flex-col sm:flex-row items-center justify-end gap-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('inicio')}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    Voltar ao Painel Geral
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingPass}
+                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSubmittingPass ? (
+                      <>
+                        <Clock className="w-4 h-4 animate-spin" />
+                        <span>Salvando Senha...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Salvar Nova Senha</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Security Notes Box */}
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-3 text-xs text-slate-400">
+              <h4 className="font-bold text-slate-200 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                Dicas de Segurança para o Associado AIAPE
+              </h4>
+              <ul className="space-y-1.5 list-disc list-inside text-slate-400 text-[11px] leading-relaxed">
+                <li>Sua senha permite consultar sua carteira digital, enviar comprovantes e solicitar empréstimos parceiros.</li>
+                <li>Evite compartilhar sua senha com terceiros para preservar seus dados cadastrais.</li>
+                <li>Caso esqueça sua senha no futuro, a diretoria da AIAPE poderá redefini-la para você a qualquer momento.</li>
+              </ul>
             </div>
           </div>
         )}
