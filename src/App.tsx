@@ -358,95 +358,158 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Firebase Auth Observer & Sync
+  // Firebase Auth Observer & Real-time Cloud Synchronization
   useEffect(() => {
-    let unsubscribeSnapshot: (() => void) | null = null;
+    let unsubs: (() => void)[] = [];
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
 
-      if (unsubscribeSnapshot) {
-        unsubscribeSnapshot();
-        unsubscribeSnapshot = null;
-      }
+      // Clean up previous snapshot listeners
+      unsubs.forEach(u => u());
+      unsubs = [];
 
       if (!currentUser) {
         try {
           setSyncStatus('sincronizando');
           await signInAnonymously(auth);
         } catch (err) {
-          console.warn('Login anônimo indisponível. Modo offline ativo.', err);
+          console.warn('Login anônimo indisponível. Operando com cache local.', err);
           setSyncStatus('erro');
-          loadLocalTransactions();
         }
-      } else {
-        setSyncStatus('sincronizando');
-        try {
-          const txRef = collection(db, 'users', currentUser.uid, 'transactions');
-          const txQuery = query(txRef, orderBy('createdAt', 'desc'));
+      }
 
-          unsubscribeSnapshot = onSnapshot(txQuery, async (querySnapshot) => {
-            let list: Transaction[] = [];
-            querySnapshot.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as Transaction);
-            });
-
-            if (list.length === 0) {
-              if (!isInitializingRef.current) {
-                isInitializingRef.current = true;
-                try {
-                  const savedLocal = safeGetLocalStorage('assoc_transactions');
-                  const baseList: Transaction[] = savedLocal
-                    ? JSON.parse(savedLocal).filter((t: any) => !['tx-1', 'tx-2', 'tx-3', 'tx-4', 'tx-5', 'tx-6'].includes(t.id))
-                    : INITIAL_TRANSACTIONS;
-                  setTransactions(baseList);
-
-                  if (baseList.length > 0) {
-                    const batch = writeBatch(db);
-                    baseList.forEach((initTx) => {
-                      const txDocRef = doc(db, 'users', currentUser.uid, 'transactions', initTx.id);
-                      batch.set(txDocRef, initTx);
-                    });
-                    await batch.commit();
-                  }
-                } catch (initErr) {
-                  console.error('Falha ao inicializar transações no Firestore:', initErr);
-                  setTransactions([]);
-                } finally {
-                  isInitializingRef.current = false;
-                }
-              }
-            } else {
-              list.sort((a, b) => {
-                const dateA = new Date(a.date).getTime() || 0;
-                const dateB = new Date(b.date).getTime() || 0;
-                if (dateB !== dateA) return dateB - dateA;
-                const createdA = new Date(a.createdAt).getTime() || 0;
-                const createdB = new Date(b.createdAt).getTime() || 0;
-                return createdB - createdA;
-              });
-              setTransactions(list);
-            }
-            setSyncStatus('sincronizado');
-          }, (error) => {
-            console.warn('Erro no listener do Firestore:', error);
-            setSyncStatus('erro');
-            loadLocalTransactions();
+      // Establish real-time Firestore listeners on shared collections
+      setSyncStatus('sincronizando');
+      try {
+        // 1. Synchronize Associates
+        const associatesRef = collection(db, 'associates');
+        const unsubAssociates = onSnapshot(associatesRef, (snapshot) => {
+          const list: Associate[] = [];
+          snapshot.forEach(docSnap => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as Associate);
           });
-        } catch (setupErr) {
-          console.error('Falha ao configurar listener:', setupErr);
+          
+          if (list.length > 0) {
+            // Sort by registration / membership date desc
+            list.sort((a, b) => {
+              const dateA = new Date(a.membershipDate || '').getTime() || 0;
+              const dateB = new Date(b.membershipDate || '').getTime() || 0;
+              return dateB - dateA;
+            });
+            setAssociates(list);
+            safeSetLocalStorage('assoc_associates', JSON.stringify(list));
+          } else {
+            // If cloud is empty and we have local associates, initialize cloud
+            const savedLocal = safeGetLocalStorage('assoc_associates');
+            if (savedLocal) {
+              try {
+                const parsed = JSON.parse(savedLocal);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  parsed.forEach(async (assoc: Associate) => {
+                    await setDoc(doc(db, 'associates', assoc.id), assoc);
+                  });
+                }
+              } catch (e) {
+                console.warn('Erro ao migrar associados locais para o Firebase:', e);
+              }
+            }
+          }
+          setSyncStatus('sincronizado');
+        }, (err) => {
+          console.warn('Erro ao escutar associados no Firestore:', err);
           setSyncStatus('erro');
-          loadLocalTransactions();
-        }
+        });
+        unsubs.push(unsubAssociates);
+
+        // 2. Synchronize Transactions (Cash Flow)
+        const transactionsRef = collection(db, 'transactions');
+        const unsubTransactions = onSnapshot(transactionsRef, (snapshot) => {
+          const list: Transaction[] = [];
+          snapshot.forEach(docSnap => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as Transaction);
+          });
+
+          if (list.length > 0) {
+            list.sort((a, b) => {
+              const dateA = new Date(a.date).getTime() || 0;
+              const dateB = new Date(b.date).getTime() || 0;
+              if (dateB !== dateA) return dateB - dateA;
+              const createdA = new Date(a.createdAt).getTime() || 0;
+              const createdB = new Date(b.createdAt).getTime() || 0;
+              return createdB - createdA;
+            });
+            setTransactions(list);
+            safeSetLocalStorage('assoc_transactions', JSON.stringify(list));
+          }
+          setSyncStatus('sincronizado');
+        }, (err) => {
+          console.warn('Erro ao escutar transações no Firestore:', err);
+          setSyncStatus('erro');
+        });
+        unsubs.push(unsubTransactions);
+
+        // 3. Synchronize Events & Assemblies
+        const eventsRef = collection(db, 'events');
+        const unsubEvents = onSnapshot(eventsRef, (snapshot) => {
+          const list: AssociationEvent[] = [];
+          snapshot.forEach(docSnap => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as AssociationEvent);
+          });
+          if (list.length > 0) {
+            setEvents(list);
+            safeSetLocalStorage('assoc_events', JSON.stringify(list));
+          }
+        }, (err) => {
+          console.warn('Erro ao escutar eventos:', err);
+        });
+        unsubs.push(unsubEvents);
+
+        // 4. Synchronize Associate Requests
+        const requestsRef = collection(db, 'requests');
+        const unsubRequests = onSnapshot(requestsRef, (snapshot) => {
+          const list: AssociateRequest[] = [];
+          snapshot.forEach(docSnap => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as AssociateRequest);
+          });
+          if (list.length > 0) {
+            setAssociateRequests(list);
+            safeSetLocalStorage('assoc_requests', JSON.stringify(list));
+          }
+        }, (err) => {
+          console.warn('Erro ao escutar solicitações:', err);
+        });
+        unsubs.push(unsubRequests);
+
+        // 5. Synchronize Association Configuration
+        const configDocRef = doc(db, 'config', 'association');
+        const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() as AssociationConfig;
+            setAssociationConfig(prev => ({
+              ...prev,
+              ...data
+            }));
+            safeSetLocalStorage('assoc_config', JSON.stringify(data));
+          } else {
+            // Save initial config to cloud
+            setDoc(configDocRef, associationConfig, { merge: true }).catch(console.warn);
+          }
+        }, (err) => {
+          console.warn('Erro ao escutar configurações:', err);
+        });
+        unsubs.push(unsubConfig);
+
+      } catch (setupErr) {
+        console.error('Falha ao configurar sincronização em nuvem:', setupErr);
+        setSyncStatus('erro');
       }
     });
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeSnapshot) {
-        (unsubscribeSnapshot as () => void)();
-      }
+      unsubs.forEach(u => u());
     };
   }, []);
 
@@ -474,83 +537,115 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    if (user) {
-      setSyncStatus('sincronizando');
-      try {
-        await setDoc(doc(db, 'users', user.uid, 'transactions', txId), tx);
-        setSyncStatus('sincronizado');
-      } catch (err) {
-        console.error('Erro ao salvar no Firestore:', err);
-        setSyncStatus('erro');
-      }
-    } else {
-      const updated = [tx, ...transactions];
-      setTransactions(updated);
-      safeSetLocalStorage('assoc_transactions', JSON.stringify(updated));
+    // Update local state immediately for snappy UI
+    setTransactions(prev => [tx, ...prev]);
+    safeSetLocalStorage('assoc_transactions', JSON.stringify([tx, ...transactions]));
+
+    // Persist to shared cloud Firestore
+    setSyncStatus('sincronizando');
+    try {
+      await setDoc(doc(db, 'transactions', txId), tx);
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao salvar transação no Firestore:', err);
+      setSyncStatus('erro');
     }
   };
 
   const handleToggleStatus = async (id: string) => {
-    if (user) {
-      setSyncStatus('sincronizando');
-      try {
-        const target = transactions.find(t => t.id === id);
-        if (target) {
-          const nextStatus = target.status === 'pago' ? 'pendente' : 'pago';
-          await updateDoc(doc(db, 'users', user.uid, 'transactions', id), {
-            status: nextStatus
-          });
-          setSyncStatus('sincronizado');
-        }
-      } catch (err) {
-        console.error('Erro ao atualizar status:', err);
-        setSyncStatus('erro');
+    const target = transactions.find(t => t.id === id);
+    if (!target) return;
+    const nextStatus = target.status === 'pago' ? 'pendente' : 'pago';
+
+    const updated = transactions.map(t => {
+      if (t.id === id) {
+        return { ...t, status: nextStatus as TransactionStatus };
       }
-    } else {
-      const updated = transactions.map(t => {
-        if (t.id === id) {
-          return { ...t, status: (t.status === 'pago' ? 'pendente' : 'pago') as TransactionStatus };
-        }
-        return t;
+      return t;
+    });
+    setTransactions(updated);
+    safeSetLocalStorage('assoc_transactions', JSON.stringify(updated));
+
+    setSyncStatus('sincronizando');
+    try {
+      await updateDoc(doc(db, 'transactions', id), {
+        status: nextStatus
       });
-      setTransactions(updated);
-      safeSetLocalStorage('assoc_transactions', JSON.stringify(updated));
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      setSyncStatus('erro');
     }
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (user) {
-      setSyncStatus('sincronizando');
-      try {
-        await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
-        setSyncStatus('sincronizado');
-      } catch (err) {
-        console.error('Erro ao excluir do Firestore:', err);
-        setSyncStatus('erro');
-      }
-    } else {
-      const updated = transactions.filter(t => t.id !== id);
-      setTransactions(updated);
-      safeSetLocalStorage('assoc_transactions', JSON.stringify(updated));
+    const updated = transactions.filter(t => t.id !== id);
+    setTransactions(updated);
+    safeSetLocalStorage('assoc_transactions', JSON.stringify(updated));
+
+    setSyncStatus('sincronizando');
+    try {
+      await deleteDoc(doc(db, 'transactions', id));
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao excluir do Firestore:', err);
+      setSyncStatus('erro');
     }
   };
 
-  // Associates Handlers
+  // Associates Handlers (Synchronized with Firestore for all notebooks & smartphones)
   const handleAddAssociate = (assocData: Omit<Associate, 'id'>): Associate => {
     const newAssoc: Associate = {
       ...assocData,
       id: `assoc-${Date.now()}`
     };
+
+    // Update locally
     setAssociates(prev => [newAssoc, ...prev]);
+    safeSetLocalStorage('assoc_associates', JSON.stringify([newAssoc, ...associates]));
+
+    // Save to Firestore Cloud so notebook and all devices see it immediately
+    setSyncStatus('sincronizando');
+    setDoc(doc(db, 'associates', newAssoc.id), newAssoc)
+      .then(() => {
+        setSyncStatus('sincronizado');
+      })
+      .catch((err) => {
+        console.error('Erro ao salvar associado no Firestore:', err);
+        setSyncStatus('erro');
+      });
+
     return newAssoc;
   };
 
-  const handleUpdateAssociate = (updatedAssoc: Associate) => {
-    setAssociates(associates.map(a => a.id === updatedAssoc.id ? updatedAssoc : a));
+  const handleUpdateAssociate = async (updatedAssoc: Associate) => {
+    const updated = associates.map(a => a.id === updatedAssoc.id ? updatedAssoc : a);
+    setAssociates(updated);
+    safeSetLocalStorage('assoc_associates', JSON.stringify(updated));
+
+    setSyncStatus('sincronizando');
+    try {
+      await setDoc(doc(db, 'associates', updatedAssoc.id), updatedAssoc, { merge: true });
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao atualizar associado no Firestore:', err);
+      setSyncStatus('erro');
+    }
   };
 
-  const handleDeleteAssociate = (id: string) => {
-    setAssociates(associates.filter(a => a.id !== id));
+  const handleDeleteAssociate = async (id: string) => {
+    const updated = associates.filter(a => a.id !== id);
+    setAssociates(updated);
+    safeSetLocalStorage('assoc_associates', JSON.stringify(updated));
+
+    setSyncStatus('sincronizando');
+    try {
+      await deleteDoc(doc(db, 'associates', id));
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao excluir associado no Firestore:', err);
+      setSyncStatus('erro');
+    }
   };
 
   // Register Dues Payment (Baixa de Mensalidade)
@@ -591,20 +686,64 @@ export default function App() {
   };
 
   // Events Handlers
-  const handleAddEvent = (eventData: Omit<AssociationEvent, 'id'>) => {
+  const handleAddEvent = async (eventData: Omit<AssociationEvent, 'id'>) => {
     const newEvent: AssociationEvent = {
       ...eventData,
       id: `ev-${Date.now()}`
     };
-    setEvents([newEvent, ...events]);
+    setEvents(prev => [newEvent, ...prev]);
+    safeSetLocalStorage('assoc_events', JSON.stringify([newEvent, ...events]));
+
+    try {
+      await setDoc(doc(db, 'events', newEvent.id), newEvent);
+    } catch (err) {
+      console.error('Erro ao salvar evento:', err);
+    }
   };
 
-  const handleUpdateEvent = (updatedEvent: AssociationEvent) => {
+  const handleUpdateEvent = async (updatedEvent: AssociationEvent) => {
     setEvents(events.map(ev => ev.id === updatedEvent.id ? updatedEvent : ev));
+    try {
+      await setDoc(doc(db, 'events', updatedEvent.id), updatedEvent, { merge: true });
+    } catch (err) {
+      console.error('Erro ao atualizar evento:', err);
+    }
   };
 
-  const handleDeleteEvent = (id: string) => {
+  const handleDeleteEvent = async (id: string) => {
     setEvents(events.filter(ev => ev.id !== id));
+    try {
+      await deleteDoc(doc(db, 'events', id));
+    } catch (err) {
+      console.error('Erro ao excluir evento:', err);
+    }
+  };
+
+  // Request Update Handler
+  const handleUpdateRequestStatus = async (id: string, status: RequestStatus, note?: string) => {
+    const updated = associateRequests.map(r => r.id === id ? { ...r, status, adminNote: note } : r);
+    setAssociateRequests(updated);
+    safeSetLocalStorage('assoc_requests', JSON.stringify(updated));
+
+    try {
+      await updateDoc(doc(db, 'requests', id), {
+        status,
+        adminNote: note || ''
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar solicitação no Firestore:', err);
+    }
+  };
+
+  // Config Update Handler
+  const handleSaveConfig = async (newConfig: AssociationConfig) => {
+    setAssociationConfig(newConfig);
+    safeSetLocalStorage('assoc_config', JSON.stringify(newConfig));
+    try {
+      await setDoc(doc(db, 'config', 'association'), newConfig, { merge: true });
+    } catch (err) {
+      console.error('Erro ao salvar configuração no Firestore:', err);
+    }
   };
 
   // Authentication submit handler
@@ -736,6 +875,34 @@ export default function App() {
               <option value="Setembro 2026" className="bg-slate-900">Setembro 2026</option>
               <option value="Ano 2026" className="bg-slate-900">Ano de 2026</option>
             </select>
+          </div>
+
+          <div 
+            title={
+              syncStatus === 'sincronizado' 
+                ? 'Nuvem Conectada e Sincronizada em Tempo Real (Notebook, Celulares e Vercel)' 
+                : syncStatus === 'sincronizando' 
+                ? 'Sincronizando dados com a nuvem...' 
+                : 'Modo Offline / Falha na Nuvem'
+            }
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${
+              syncStatus === 'sincronizado'
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                : syncStatus === 'sincronizando'
+                ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+            }`}
+          >
+            {syncStatus === 'sincronizado' ? (
+              <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+            ) : syncStatus === 'sincronizando' ? (
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+            ) : (
+              <CloudOff className="w-3.5 h-3.5 text-rose-400" />
+            )}
+            <span className="hidden md:inline text-[11px]">
+              {syncStatus === 'sincronizado' ? 'Nuvem Ativa' : syncStatus === 'sincronizando' ? 'Sincronizando...' : 'Offline'}
+            </span>
           </div>
 
           <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 border border-slate-800 px-3 py-1.5 rounded-xl">
@@ -935,6 +1102,7 @@ export default function App() {
               associationConfig={associationConfig}
               onOpenPublicRegister={() => setIsPublicRegisterMode(true)}
               requests={associateRequests}
+              onUpdateRequestStatus={handleUpdateRequestStatus}
             />
           )}
 
@@ -997,7 +1165,7 @@ export default function App() {
           {activeTab === 'configuracoes' && (
             <AssociationSettings
               config={associationConfig}
-              onSaveConfig={(newConfig) => setAssociationConfig(newConfig)}
+              onSaveConfig={handleSaveConfig}
             />
           )}
         </main>

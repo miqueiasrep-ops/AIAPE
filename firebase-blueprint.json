@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "Associate": {
+      "title": "Associate",
+      "description": "Membro associado da AIAPE",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "document": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "joinDate": { "type": "string" },
+        "monthlyFee": { "type": "number" },
+        "dueDay": { "type": "number" }
+      },
+      "required": ["id", "name", "email", "phone"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Lançamento financeiro de receita ou despesa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "month": { "type": "string" },
+        "payer": { "type": "string" },
+        "bank": { "type": "string" },
+        "value": { "type": "number" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "date", "payer", "value", "type", "category"]
+    },
+    "AssociationEvent": {
+      "title": "AssociationEvent",
+      "description": "Evento ou assembleia da associação",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "location": { "type": "string" },
+        "type": { "type": "string" }
+      },
+      "required": ["id", "title", "date"]
+    },
+    "AssociateRequest": {
+      "title": "AssociateRequest",
+      "description": "Solicitação do associado ou matrícula",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "associateName": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "associateName", "type", "status", "date"]
+    },
+    "AssociationConfig": {
+      "title": "AssociationConfig",
+      "description": "Configurações gerais da associação",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "defaultMonthlyFee": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/associates/{associateId}": {
+      "schema": { "$ref": "#/entities/Associate" },
+      "description": "Coleção compartilhada de associados"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Coleção compartilhada de transações financeiras"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/AssociationEvent" },
+      "description": "Coleção de eventos da associação"
+    },
+    "/requests/{requestId}": {
+      "schema": { "$ref": "#/entities/AssociateRequest" },
+      "description": "Coleção de solicitações e matrículas"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/AssociationConfig" },
+      "description": "Configurações gerais sincronizadas"
+    }
+  }
+}

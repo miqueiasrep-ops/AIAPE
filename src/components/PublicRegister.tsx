@@ -139,6 +139,12 @@ export function PublicRegister({
     setUploadError(null);
     const sizeMb = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
 
+    if (file.size > 400 * 1024) {
+      setUploadError(`O arquivo "${file.name}" tem ${sizeMb}. O tamanho máximo permitido por documento PDF é de 400 KB para armazenamento seguro em nuvem. Por favor, comprima o PDF antes de enviar.`);
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
