@@ -35,7 +35,10 @@ import {
   Eye,
   EyeOff,
   Save,
-  Shield
+  Shield,
+  ShieldAlert,
+  Ban,
+  MessageCircle
 } from 'lucide-react';
 import { 
   Associate, 
@@ -48,6 +51,7 @@ import {
 import { AiapeLogo } from './AiapeLogo';
 import ReceiptExtractor from './ReceiptExtractor';
 import { PixPaymentCard } from './PixPaymentCard';
+import { AssociateCard } from './AssociateCard';
 
 interface AssociatePortalProps {
   associate: Associate;
@@ -283,6 +287,69 @@ export function AssociatePortal({
     }
   };
 
+  // IF ASSOCIATE IS MARKED AS INACTIVE, BLOCK ALL ACCESS
+  if (associate.status === 'inativo') {
+    const handleContactAdmin = () => {
+      const phone = (associationConfig.phone || '81988887777').replace(/\D/g, '');
+      const phoneWithCountry = phone.length <= 11 ? `55${phone}` : phone;
+      const msg = `Olá Diretoria da AIAPE! Meu cadastro (${associate.name} - CPF: ${associate.document}) está marcado como INATIVO e gostaria de solicitar informações para reativação do meu acesso.`;
+      const url = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+    };
+
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-slate-900 border border-rose-900/60 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-48 h-48 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="text-center space-y-3">
+            <div className="mx-auto w-14 h-14 mb-2 flex items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
+              CADASTRO INATIVO • ACESSO SUSPENSO
+            </span>
+            <h2 className="text-2xl font-black text-white">Acesso Bloqueado</h2>
+            <p className="text-sm text-slate-300">
+              Olá, <strong className="text-white">{associate.name}</strong>.
+            </p>
+          </div>
+
+          <div className="p-4 bg-slate-950/80 border border-rose-950 rounded-2xl space-y-3 text-xs leading-relaxed text-slate-300">
+            <p>
+              Seu cadastro na <strong>AIAPE</strong> (Documento: <span className="font-mono text-slate-200">{associate.document || 'Não informado'}</span>) encontra-se atualmente marcado com o status <strong className="text-rose-400">INATIVO</strong> pela Diretoria da Associação.
+            </p>
+            <p className="text-slate-400 text-[11px]">
+              Enquanto seu cadastro estiver inativo, todas as funcionalidades do portal (carteirinha digital, solicitação de empréstimos parceiros, descontos em convênios e histórico financeiro) estão temporariamente desabilitadas.
+            </p>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            <button
+              onClick={handleContactAdmin}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Entrar em Contato com a Diretoria no WhatsApp
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              Sair da Conta / Voltar ao Início
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white antialiased">
       {/* Top Header */}
@@ -462,12 +529,22 @@ export function AssociatePortal({
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
               activeTab === 'financeiro'
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                : 'bg-slate-900 text-emerald-400 hover:text-white hover:bg-slate-800 border border-emerald-500/30'
+                : associate.isExempt
+                  ? 'bg-slate-900 text-purple-300 hover:text-white hover:bg-slate-800 border border-purple-500/30'
+                  : 'bg-slate-900 text-emerald-400 hover:text-white hover:bg-slate-800 border border-emerald-500/30'
             }`}
           >
             <CreditCard className="w-4 h-4 text-emerald-400" />
-            <span>Pagar Mensalidade (Pix QR Code)</span>
-            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-bold">R$ 70,00</span>
+            <span>{associate.isExempt ? 'Mensalidade & Financeiro' : 'Pagar Mensalidade (Pix QR Code)'}</span>
+            {associate.isExempt ? (
+              <span className="bg-purple-500/20 text-purple-300 text-[10px] px-1.5 py-0.5 rounded font-extrabold flex items-center gap-1">
+                <Gift className="w-2.5 h-2.5" /> Isento
+              </span>
+            ) : (
+              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                {formatCurrency(associate.monthlyFee || 70)}
+              </span>
+            )}
           </button>
 
           <button
@@ -1025,16 +1102,49 @@ export function AssociatePortal({
               </p>
             </div>
 
+            {/* Exemption Banner if associate is exempt */}
+            {associate.isExempt && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-gradient-to-r from-purple-950 via-slate-900 to-purple-900/60 border border-purple-500/50 p-6 rounded-3xl space-y-3 shadow-2xl relative overflow-hidden"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300">
+                    <Gift className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="bg-purple-500/20 text-purple-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-purple-500/30 inline-block mb-1">
+                      Benefício Concedido pela Diretoria Executiva
+                    </span>
+                    <h3 className="text-lg font-black text-white">Isenção de Mensalidade Ativa</h3>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950/70 border border-purple-500/20 rounded-2xl space-y-1.5 text-xs text-purple-200">
+                  <p>• <strong>Finalidade / Motivo:</strong> {associate.exemptionInfo?.reason || 'Concessão especial pela Diretoria Executiva AIAPE'}</p>
+                  <p>• <strong>Período de Validade:</strong> {associate.exemptionInfo?.endDate ? `Válido até ${associate.exemptionInfo.endDate}` : 'Permanente / Diretoria'}</p>
+                  <p>• <strong>Valor a pagar:</strong> <span className="font-extrabold text-emerald-400">R$ 0,00</span> (Contribuição coberta pela associação)</p>
+                </div>
+
+                <p className="text-xs text-slate-300">
+                  Você não precisa realizar pagamentos durante o período de isenção. Sua Carteira Digital e todos os seus benefícios e convênios permanecem 100% ativos e regulares!
+                </p>
+              </motion.div>
+            )}
+
             {/* Cartão de Pagamento Pix QR Code Oficial */}
-            <PixPaymentCard
-              amount={associate.monthlyFee || 70}
-              associateName={associate.name}
-              pixKey={associationConfig.pixKey || 'contato@aiape.org.br'}
-              pixCopiaCola={associationConfig.pixCopiaCola}
-              pixQrCodeImageUrl={associationConfig.pixQrCodeImageUrl}
-              merchantName={associationConfig.name}
-              onOpenExtractor={() => setActiveTab('comprovante')}
-            />
+            {!associate.isExempt && (
+              <PixPaymentCard
+                amount={associate.monthlyFee || 70}
+                associateName={associate.name}
+                pixKey={associationConfig.pixKey || 'contato@aiape.org.br'}
+                pixCopiaCola={associationConfig.pixCopiaCola}
+                pixQrCodeImageUrl={associationConfig.pixQrCodeImageUrl}
+                merchantName={associationConfig.name}
+                onOpenExtractor={() => setActiveTab('comprovante')}
+              />
+            )}
 
             {/* Banner Chamada Extrator IA */}
             <div className="bg-gradient-to-r from-purple-950/70 via-slate-900 to-slate-900 border border-purple-500/30 p-5 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
@@ -1131,118 +1241,72 @@ export function AssociatePortal({
           </div>
         )}
 
-        {/* TAB 7: CARTEIRINHA DIGITAL */}
+        {/* TAB 7: CARTEIRINHA DIGITAL OFICIAL */}
         {activeTab === 'carteirinha' && (
-          <div className="max-w-xl mx-auto space-y-6">
-            <div className="bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 border border-blue-600/40 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 text-white text-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="space-y-6">
+            <AssociateCard
+              associate={associate}
+              associationConfig={associationConfig}
+              onUpdateAssociate={onUpdateAssociate}
+              isEditable={true}
+            />
 
-              <div className="flex flex-col items-center gap-2">
-                <AiapeLogo variant="icon" size="lg" customLogoUrl={associationConfig.logoUrl} />
-                <h2 className="text-lg font-black tracking-tight mt-2">{associationConfig.name}</h2>
-                <span className="bg-blue-600/30 text-blue-300 border border-blue-400/30 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-                  CARTEIRA IDENTIFICADORA DE INSTRUTOR DE TRÂNSITO
-                </span>
+            {/* Documentos Anexados do Instrutor */}
+            {associate.documents && (
+              <div className="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-3 shadow-xl">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  Documentos de Habilitação Anexados (PDF)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                  {associate.documents.cnhUrl && (
+                    <a
+                      href={associate.documents.cnhUrl}
+                      download={associate.documents.cnhName || 'CNH.pdf'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 rounded-2xl text-blue-400 font-semibold flex items-center gap-2.5 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                      <div className="truncate">
+                        <span className="block text-[10px] text-slate-400 font-normal">1. CNH (PDF):</span>
+                        <span className="truncate block text-xs">{associate.documents.cnhName || 'CNH.pdf'}</span>
+                      </div>
+                    </a>
+                  )}
+                  {associate.documents.crlvUrl && (
+                    <a
+                      href={associate.documents.crlvUrl}
+                      download={associate.documents.crlvName || 'CRLV.pdf'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 rounded-2xl text-blue-400 font-semibold flex items-center gap-2.5 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                      <div className="truncate">
+                        <span className="block text-[10px] text-slate-400 font-normal">2. CRLV Veículo:</span>
+                        <span className="truncate block text-xs">{associate.documents.crlvName || 'CRLV.pdf'}</span>
+                      </div>
+                    </a>
+                  )}
+                  {associate.documents.senatranUrl && (
+                    <a
+                      href={associate.documents.senatranUrl}
+                      download={associate.documents.senatranName || 'Credencial_SENATRAN.pdf'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3 bg-slate-950 hover:bg-slate-800/80 border border-slate-800 rounded-2xl text-blue-400 font-semibold flex items-center gap-2.5 transition-colors"
+                    >
+                      <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                      <div className="truncate">
+                        <span className="block text-[10px] text-slate-400 font-normal">3. SENATRAN:</span>
+                        <span className="truncate block text-xs">{associate.documents.senatranName || 'Credencial_SENATRAN.pdf'}</span>
+                      </div>
+                    </a>
+                  )}
+                </div>
               </div>
-
-              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 space-y-4 text-left">
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Nome do Instrutor:</span>
-                    <span className="font-extrabold text-white text-sm">{associate.name}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">CPF / Documento:</span>
-                    <span className="font-extrabold text-blue-400 text-sm">{associate.document || 'Não informado'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Categoria:</span>
-                    <span className="font-semibold text-slate-200">{associate.category}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Status da Filiação:</span>
-                    <span className="font-extrabold text-emerald-400 uppercase">{associate.status}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Data de Filiação:</span>
-                    <span className="font-semibold text-slate-200">{associate.membershipDate}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Código do Matrícula:</span>
-                    <span className="font-mono font-bold text-slate-300">#{associate.id.toUpperCase()}</span>
-                  </div>
-                </div>
-
-                {/* Simulated QR Code for Validation */}
-                <div className="pt-4 border-t border-slate-800 flex flex-col items-center justify-center gap-2 text-center">
-                  <div className="p-3 bg-white rounded-xl shadow-md">
-                    <QrCode className="w-24 h-24 text-slate-900" />
-                  </div>
-                  <span className="text-[10px] text-slate-400">QR Code de Validação Oficial AIAPE Pernambuco</span>
-                </div>
-              </div>
-
-              <p className="text-[10px] text-slate-400 italic">
-                Apresente esta carteira digital para usufruir dos descontos e empréstimos nas empresas parceiras credenciadas.
-              </p>
-
-              {/* Documentos Anexados do Instrutor */}
-              {associate.documents && (
-                <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3 text-left">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    Documentos de Habilitação Anexados (PDF)
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                    {associate.documents.cnhUrl && (
-                      <a
-                        href={associate.documents.cnhUrl}
-                        download={associate.documents.cnhName || 'CNH.pdf'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-blue-400 font-semibold flex items-center gap-2 transition-colors"
-                      >
-                        <FileText className="w-4 h-4 text-amber-400 shrink-0" />
-                        <div className="truncate">
-                          <span className="block text-[10px] text-slate-400 font-normal">1. CNH (PDF):</span>
-                          <span className="truncate block text-xs">{associate.documents.cnhName || 'CNH.pdf'}</span>
-                        </div>
-                      </a>
-                    )}
-                    {associate.documents.crlvUrl && (
-                      <a
-                        href={associate.documents.crlvUrl}
-                        download={associate.documents.crlvName || 'CRLV.pdf'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-blue-400 font-semibold flex items-center gap-2 transition-colors"
-                      >
-                        <FileText className="w-4 h-4 text-amber-400 shrink-0" />
-                        <div className="truncate">
-                          <span className="block text-[10px] text-slate-400 font-normal">2. CRLV Veículo:</span>
-                          <span className="truncate block text-xs">{associate.documents.crlvName || 'CRLV.pdf'}</span>
-                        </div>
-                      </a>
-                    )}
-                    {associate.documents.senatranUrl && (
-                      <a
-                        href={associate.documents.senatranUrl}
-                        download={associate.documents.senatranName || 'Credencial_SENATRAN.pdf'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-blue-400 font-semibold flex items-center gap-2 transition-colors"
-                      >
-                        <FileText className="w-4 h-4 text-amber-400 shrink-0" />
-                        <div className="truncate">
-                          <span className="block text-[10px] text-slate-400 font-normal">3. SENATRAN:</span>
-                          <span className="truncate block text-xs">{associate.documents.senatranName || 'Credencial_SENATRAN.pdf'}</span>
-                        </div>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
 

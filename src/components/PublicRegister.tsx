@@ -52,6 +52,9 @@ export function PublicRegister({
     category: 'Membro Efetivo' as AssociateCategory,
     birthDate: '',
     password: '',
+    senatranCredential: '',
+    cnhCategory: 'AB',
+    photoUrl: '',
     notes: ''
   });
 
@@ -122,6 +125,53 @@ export function PublicRegister({
   const [showPassword, setShowPassword] = useState(false);
   const [createdAssociate, setCreatedAssociate] = useState<Associate | null>(null);
   const [copiedBankInfo, setCopiedBankInfo] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Formato de foto inválido! Selecione uma imagem JPG ou PNG para a foto 3x4.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 360;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const optimized = canvas.toDataURL('image/jpeg', 0.85);
+          setPhotoPreview(optimized);
+          setFormData(prev => ({ ...prev, photoUrl: optimized }));
+        }
+      };
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -182,6 +232,11 @@ export function PublicRegister({
       membershipDate: new Date().toISOString().split('T')[0],
       birthDate: formData.birthDate || undefined,
       password: finalPassword,
+      photoUrl: formData.photoUrl || undefined,
+      senatranCredential: formData.senatranCredential.trim() || undefined,
+      cnhCategory: formData.cnhCategory.trim() || 'AB',
+      registrationNumber: `AIAPE-${Math.floor(1000 + Math.random() * 9000)}`,
+      validityDate: 'DEZ/2026',
       documents: {
         cnhName: docCnh.name,
         cnhUrl: docCnh.url,
@@ -297,6 +352,77 @@ export function PublicRegister({
                       placeholder="(81) 98765-4321"
                       className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3.5 py-2.5 rounded-xl focus:outline-hidden focus:border-blue-500 transition-colors"
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      Nº da Credencial SENATRAN / DETRAN
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.senatranCredential}
+                      onChange={(e) => setFormData({ ...formData, senatranCredential: e.target.value })}
+                      placeholder="Ex: SENATRAN/DETRAN-PE: 489210"
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3.5 py-2.5 rounded-xl focus:outline-hidden focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Categoria CNH
+                    </label>
+                    <select
+                      value={formData.cnhCategory}
+                      onChange={(e) => setFormData({ ...formData, cnhCategory: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3.5 py-2.5 rounded-xl focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="AB">AB (Carro e Moto)</option>
+                      <option value="B">B (Carro / Automóvel)</option>
+                      <option value="A">A (Moto / Motocicleta)</option>
+                      <option value="AD">AD (Ônibus / Carro e Moto)</option>
+                      <option value="AE">AE (Carreta / Carro e Moto)</option>
+                      <option value="D">D (Transporte Coletivo / Ônibus)</option>
+                      <option value="E">E (Veículos Articulados / Carreta)</option>
+                      <option value="C">C (Caminhão / Carga)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Foto 3x4 do Associado */}
+                <div className="bg-slate-900/60 border border-slate-800 p-3.5 rounded-2xl space-y-2">
+                  <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Foto 3x4 do Instrutor(a) (Para a Carteira Digital Oficial)
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-semibold">Opcional / Recomendado</span>
+                  </label>
+                  
+                  <div className="flex items-center gap-4">
+                    {photoPreview ? (
+                      <div className="relative w-16 h-20 rounded-xl overflow-hidden border-2 border-amber-400 bg-slate-950 shrink-0">
+                        <img src={photoPreview} alt="Foto 3x4" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-16 h-20 rounded-xl bg-slate-800 border border-slate-700 flex flex-col items-center justify-center text-slate-500 shrink-0 text-center p-1">
+                        <span className="text-[10px] font-bold">Sem Foto</span>
+                      </div>
+                    )}
+
+                    <div className="flex-1 space-y-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoUpload}
+                        className="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        Envie uma foto de rosto nítida (JPG/PNG). Ela aparecerá automaticamente na sua Carteira Digital com QR Code.
+                      </p>
+                    </div>
                   </div>
                 </div>
 

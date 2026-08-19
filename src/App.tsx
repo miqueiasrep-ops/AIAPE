@@ -57,6 +57,7 @@ import { AssociationSettings } from './components/AssociationSettings';
 import { AssociationHistory } from './components/AssociationHistory';
 import { AssociatePortal } from './components/AssociatePortal';
 import { AssociateLoginModal } from './components/AssociateLoginModal';
+import { PublicValidation } from './components/PublicValidation';
 import { AiapeLogo } from './components/AiapeLogo';
 import {
   auth,
@@ -307,10 +308,26 @@ export default function App() {
     safeRemoveLocalStorage('assoc_finance_unlocked');
     setActiveTab('dashboard');
   };
+  // Public QR Code Validation mode (when scanning the digital card QR Code)
+  const [validatingAssociateId, setValidatingAssociateId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('validar') || params.get('v') || null;
+    }
+    return null;
+  });
+
+  // Public Self-Registration / Enrollment mode
   const [isPublicRegisterMode, setIsPublicRegisterMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return params.get('autocadastro') === 'true' || params.get('cadastro') === 'true';
+      return (
+        params.get('autocadastro') === 'true' || 
+        params.get('cadastro') === 'true' ||
+        params.get('matricula') === 'true' ||
+        params.get('filiacao') === 'true' ||
+        params.get('inscricao') === 'true'
+      );
     }
     return false;
   });
@@ -779,12 +796,43 @@ export default function App() {
     }
   };
 
+  // Public Credential QR Code Validation Screen (scanned by phone/authority/inspector)
+  if (validatingAssociateId) {
+    return (
+      <PublicValidation
+        associateId={validatingAssociateId}
+        associates={associates}
+        associationConfig={associationConfig}
+        onBack={() => {
+          setValidatingAssociateId(null);
+          if (typeof window !== 'undefined' && window.history.replaceState) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('validar');
+            url.searchParams.delete('v');
+            window.history.replaceState({}, '', url.toString());
+          }
+        }}
+      />
+    );
+  }
+
   if (isPublicRegisterMode) {
     return (
       <PublicRegister
         associationConfig={associationConfig}
         onRegisterSuccess={(assoc) => handleAddAssociate(assoc)}
-        onBackToDashboard={() => setIsPublicRegisterMode(false)}
+        onBackToDashboard={() => {
+          setIsPublicRegisterMode(false);
+          if (typeof window !== 'undefined' && window.history.replaceState) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('autocadastro');
+            url.searchParams.delete('cadastro');
+            url.searchParams.delete('matricula');
+            url.searchParams.delete('filiacao');
+            url.searchParams.delete('inscricao');
+            window.history.replaceState({}, '', url.toString());
+          }
+        }}
         onEnterPortalDirectly={(assoc) => {
           setIsPublicRegisterMode(false);
           setLoggedAssociate(assoc);
@@ -793,14 +841,19 @@ export default function App() {
     );
   }
 
-  if (loggedAssociate) {
+  // Resolve current active associate with live status from associates list
+  const currentLoggedAssociate = loggedAssociate
+    ? associates.find(a => a.id === loggedAssociate.id) || loggedAssociate
+    : null;
+
+  if (currentLoggedAssociate) {
     return (
       <AssociatePortal
-        associate={loggedAssociate}
+        associate={currentLoggedAssociate}
         associationConfig={associationConfig}
         allAssociates={associates}
-        myTransactions={transactions.filter(t => t.associateId === loggedAssociate.id || t.payer.toLowerCase().includes(loggedAssociate.name.toLowerCase()))}
-        requests={associateRequests.filter(r => r.associateId === loggedAssociate.id || r.associateName === loggedAssociate.name)}
+        myTransactions={transactions.filter(t => t.associateId === currentLoggedAssociate.id || t.payer.toLowerCase().includes(currentLoggedAssociate.name.toLowerCase()))}
+        requests={associateRequests.filter(r => r.associateId === currentLoggedAssociate.id || r.associateName === currentLoggedAssociate.name)}
         onSubmitRequest={handleCreateRequest}
         onLogout={() => setLoggedAssociate(null)}
         onAddTransaction={handleAddTransaction}

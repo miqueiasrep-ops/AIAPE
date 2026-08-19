@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Key, Lock, Eye, EyeOff, LogIn, AlertCircle, Sparkles } from 'lucide-react';
+import { User, Key, Lock, Eye, EyeOff, LogIn, AlertCircle, Sparkles, ShieldAlert, MessageCircle } from 'lucide-react';
 import { Associate, AssociationConfig } from '../types';
 import { AiapeLogo } from './AiapeLogo';
 
@@ -25,12 +25,15 @@ export function AssociateLoginModal({
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isInactiveBlocked, setIsInactiveBlocked] = useState(false);
+  const [blockedAssociateName, setBlockedAssociateName] = useState('');
 
   if (!isOpen) return null;
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setIsInactiveBlocked(false);
 
     const cleanInput = loginInput.trim().toLowerCase().replace(/\D/g, '');
     const rawInput = loginInput.trim().toLowerCase();
@@ -52,6 +55,14 @@ export function AssociateLoginModal({
       return;
     }
 
+    // BLOCK INACTIVE ASSOCIATE
+    if (found.status === 'inativo') {
+      setIsInactiveBlocked(true);
+      setBlockedAssociateName(found.name);
+      setErrorMsg('Acesso Bloqueado: Este associado encontra-se marcado como INATIVO no sistema e não tem permissão para acessar o portal.');
+      return;
+    }
+
     // Check password if set, or default fallback match
     if (found.password && passwordInput.trim()) {
       if (found.password !== passwordInput.trim() && passwordInput.trim() !== 'admin') {
@@ -62,6 +73,14 @@ export function AssociateLoginModal({
 
     onLoginSuccess(found);
     onClose();
+  };
+
+  const handleContactAdmin = () => {
+    const phone = (associationConfig.phone || '81988887777').replace(/\D/g, '');
+    const phoneWithCountry = phone.length <= 11 ? `55${phone}` : phone;
+    const msg = `Olá Diretoria da AIAPE! Meu cadastro (${blockedAssociateName || loginInput}) está marcado como INATIVO e gostaria de solicitar informações para reativação do meu acesso.`;
+    const url = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -87,7 +106,30 @@ export function AssociateLoginModal({
           </p>
         </div>
 
-        {errorMsg && (
+        {isInactiveBlocked ? (
+          <div className="p-4 bg-rose-950/50 border border-rose-500/40 rounded-2xl space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 mt-0.5">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-rose-300">Acesso Bloqueado / Cadastro Inativo</h4>
+                <p className="text-[11px] text-rose-200/90 leading-relaxed">
+                  O associado <strong>{blockedAssociateName}</strong> está marcado como <strong>INATIVO</strong> e seu acesso à Área do Associado está temporariamente suspenso.
+                </p>
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleContactAdmin}
+              className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-300 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Falar com a Diretoria no WhatsApp
+            </button>
+          </div>
+        ) : errorMsg && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2 text-rose-400 text-xs font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>

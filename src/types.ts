@@ -34,6 +34,21 @@ export interface ExtractionResult {
 export type AssociateStatus = 'ativo' | 'inativo' | 'inadimplente' | 'pendente';
 export type AssociateCategory = 'Membro Efetivo' | 'Membro Doador' | 'Membro Honorário' | 'Estudante / Especial' | 'Voluntário';
 
+export type ExemptionType = 'temporaria' | 'permanente' | 'premiacao' | 'ajuda_social' | 'diretoria' | 'outro';
+
+export interface ExemptionInfo {
+  isExempt: boolean;
+  type: ExemptionType;
+  monthsTotal?: number;         // Duração em meses (ex: 3, 6, 12)
+  monthsRemaining?: number;      // Meses restantes
+  startDate?: string;           // Data inicial
+  endDate?: string;             // Data final ou mês limite (ex: "2026-12-31" ou "DEZ/2026")
+  reason: string;               // Motivo (ex: "Premiação de Destaque", "Ajuda Social / Apoio Emergencial", "Cargo de Diretoria")
+  grantedBy?: string;           // Concedido por (ex: "Diretoria Executiva AIAPE")
+  grantedAt?: string;           // Data da concessão (YYYY-MM-DD)
+  notes?: string;               // Observações adicionais
+}
+
 export interface AssociateDocuments {
   cnhName?: string;
   cnhUrl?: string;
@@ -57,6 +72,13 @@ export interface Associate {
   membershipDate: string; // YYYY-MM-DD
   birthDate?: string;    // YYYY-MM-DD or MM-DD for birthday tracking
   password?: string;     // Password for Portal do Associado login
+  photoUrl?: string;     // Foto 3x4 do Associado para Carteirinha
+  senatranCredential?: string; // Número da Credencial de Instrutor SENATRAN / DETRAN
+  cnhCategory?: string;  // Categoria CNH (ex: AB, AD, AE, B, etc.)
+  registrationNumber?: string; // Matrícula Oficial AIAPE
+  validityDate?: string; // Validade da Carteira
+  isExempt?: boolean;    // Flag indicando se o associado está isento de pagar taxa
+  exemptionInfo?: ExemptionInfo; // Detalhes completos da isenção concedida pela diretoria
   notes?: string;
   documents?: AssociateDocuments;
   lastPaymentDate?: string;
