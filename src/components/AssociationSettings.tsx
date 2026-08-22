@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { Building, Save, CheckCircle, ShieldCheck, Lock, Upload, Image as ImageIcon, QrCode } from 'lucide-react';
+import { Building, Save, CheckCircle, ShieldCheck, Lock, Upload, Image as ImageIcon, QrCode, Cloud, CloudUpload, RefreshCw } from 'lucide-react';
 import jsQR from 'jsqr';
 import { AssociationConfig } from '../types';
 
 interface AssociationSettingsProps {
   config: AssociationConfig;
   onSaveConfig: (config: AssociationConfig) => void;
+  onOpenSyncModal?: () => void;
+  syncStatus?: 'sincronizado' | 'sincronizando' | 'erro';
 }
 
 export function AssociationSettings({
   config,
-  onSaveConfig
+  onSaveConfig,
+  onOpenSyncModal,
+  syncStatus = 'sincronizado'
 }: AssociationSettingsProps) {
   const [formData, setFormData] = useState<AssociationConfig>({ 
     ...config,
@@ -358,6 +362,38 @@ export function AssociationSettings({
                 Apenas pessoas com este PIN conseguirão abrir a aba de Fluxo de Caixa. (PIN Padrão: 1234)
               </p>
             </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-700/60 pb-2 flex items-center gap-2">
+            <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+            5. Banco de Dados Firestore & Sincronização em Nuvem
+          </h3>
+
+          <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${syncStatus === 'sincronizado' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <h4 className="text-xs font-bold text-white">
+                  {syncStatus === 'sincronizado' ? 'Nuvem Conectada e Operando em Tempo Real' : 'Sincronização em Andamento...'}
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Seus dados (associados, pagamentos, recibos e relatórios) são salvos de forma centralizada no Firestore e sincronizados entre todos os notebooks, tablets e celulares da diretoria.
+              </p>
+            </div>
+
+            {onOpenSyncModal && (
+              <button
+                type="button"
+                onClick={onOpenSyncModal}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/30 hover:border-emerald-500 text-emerald-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <CloudUpload className="w-3.5 h-3.5" />
+                <span>Gerenciar Sincronização</span>
+              </button>
+            )}
           </div>
         </div>
 

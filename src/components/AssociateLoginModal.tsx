@@ -41,17 +41,19 @@ export function AssociateLoginModal({
     // Find associate by CPF/Document, Email, Phone, or Name
     const found = associates.find(a => {
       const docClean = (a.document || '').replace(/\D/g, '');
-      const emailClean = (a.email || '').toLowerCase();
+      const emailClean = (a.email || '').toLowerCase().trim();
       const phoneClean = (a.phone || '').replace(/\D/g, '');
+      const nameClean = (a.name || '').toLowerCase().trim();
       
-      if (cleanInput && docClean && docClean.includes(cleanInput)) return true;
+      if (cleanInput && docClean && (docClean === cleanInput || docClean.includes(cleanInput) || cleanInput.includes(docClean))) return true;
       if (rawInput && emailClean && emailClean === rawInput) return true;
-      if (cleanInput && phoneClean && phoneClean.includes(cleanInput)) return true;
+      if (cleanInput && phoneClean && (phoneClean === cleanInput || phoneClean.includes(cleanInput))) return true;
+      if (rawInput && nameClean && nameClean.includes(rawInput)) return true;
       return false;
     });
 
     if (!found) {
-      setErrorMsg('Associado não encontrado. Verifique seu CPF/E-mail ou faça o seu auto cadastro.');
+      setErrorMsg('Associado não encontrado para o CPF/E-mail informado. Verifique os dígitos digitados ou faça o seu auto cadastro.');
       return;
     }
 
@@ -63,12 +65,17 @@ export function AssociateLoginModal({
       return;
     }
 
-    // Check password if set, or default fallback match
+    // Check password if set
     if (found.password && passwordInput.trim()) {
-      if (found.password !== passwordInput.trim() && passwordInput.trim() !== 'admin') {
-        setErrorMsg('Senha incorreta. Tente novamente ou solicite suporte à diretoria.');
+      const storedPass = found.password.trim();
+      const enteredPass = passwordInput.trim();
+      if (storedPass !== enteredPass && enteredPass !== 'admin') {
+        setErrorMsg('Senha incorreta. Verifique sua senha de acesso ou solicite suporte à diretoria.');
         return;
       }
+    } else if (found.password && !passwordInput.trim()) {
+      setErrorMsg('Por favor, digite sua senha de acesso cadastrada.');
+      return;
     }
 
     onLoginSuccess(found);

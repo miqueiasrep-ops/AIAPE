@@ -45,7 +45,8 @@ import {
   Gift,
   Heart,
   BadgePercent,
-  Sparkles as SparklesIcon
+  Sparkles as SparklesIcon,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   Associate, 
@@ -61,6 +62,7 @@ import {
 } from '../types';
 import ReceiptExtractor from './ReceiptExtractor';
 import { AssociateCard } from './AssociateCard';
+import { AssociateImportModal } from './AssociateImportModal';
 
 interface AssociateManagementProps {
   associates: Associate[];
@@ -73,6 +75,7 @@ interface AssociateManagementProps {
   onOpenPublicRegister?: () => void;
   requests?: AssociateRequest[];
   onUpdateRequestStatus?: (id: string, status: RequestStatus, note?: string) => void;
+  onBatchImportAssociates?: (newAssociates: Omit<Associate, 'id'>[], updateExisting: boolean) => Promise<{ imported: number; updated: number }>;
 }
 
 export function AssociateManagement({
@@ -85,7 +88,8 @@ export function AssociateManagement({
   associationConfig,
   onOpenPublicRegister,
   requests = [],
-  onUpdateRequestStatus
+  onUpdateRequestStatus,
+  onBatchImportAssociates
 }: AssociateManagementProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
@@ -96,6 +100,9 @@ export function AssociateManagement({
 
   // Extrator AI Receipt Modal State
   const [isExtractModalOpen, setIsExtractModalOpen] = useState(false);
+
+  // Import Excel/Forms Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Requests Modal State
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
@@ -133,6 +140,13 @@ export function AssociateManagement({
   const [exemptionNotes, setExemptionNotes] = useState<string>('');
   const [isExemptActive, setIsExemptActive] = useState<boolean>(true);
   const [exemptionSuccessToast, setExemptionSuccessToast] = useState<string | null>(null);
+
+  // WhatsApp Central Modal State
+  const [whatsAppModalAssociate, setWhatsAppModalAssociate] = useState<Associate | null>(null);
+  const [whatsAppPhone, setWhatsAppPhone] = useState<string>('');
+  const [whatsAppTemplate, setWhatsAppTemplate] = useState<'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'>('general');
+  const [whatsAppCustomText, setWhatsAppCustomText] = useState<string>('');
+  const [whatsAppCopied, setWhatsAppCopied] = useState<boolean>(false);
 
   // Form State for Adding / Editing
   const [formData, setFormData] = useState({
@@ -253,6 +267,77 @@ export function AssociateManagement({
     setShowPasswordValue(false);
     setPasswordCopied(false);
     setPasswordSuccessToast(null);
+  };
+
+  const getWhatsAppTemplateMessage = (
+    assoc: Associate,
+    template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'
+  ) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aiape.org.br';
+    const validationUrl = `${origin}/?validar=${encodeURIComponent(assoc.id)}`;
+    const regNumber = assoc.registrationNumber || `AIAPE-${assoc.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase() || '2026'}`;
+    const senatran = assoc.senatranCredential || 'Não informada';
+    const cnh = assoc.cnhCategory || 'AB';
+    const pixKey = associationConfig.pixKey || associationConfig.cnpj || '24.810.192/0001-85';
+
+    switch (template) {
+      case 'general':
+        return `Olá, Instrutor(a) *${assoc.name}*!\n\nTudo bem? Entramos em contato da *AIAPE (Associação dos Instrutores de Autoescolas de Pernambuco)*.\n\nComo podemos te ajudar hoje?`;
+
+      case 'card':
+        return `🪪 *CARTEIRA DIGITAL OFICIAL DE INSTRUTOR - AIAPE*\n\nOlá, *${assoc.name}*!\nSua Carteira Digital Oficial já está emitida e disponível para uso.\n\n📋 *Registro AIAPE:* ${regNumber}\n🚗 *Credencial SENATRAN:* ${senatran}\n📄 *Categoria CNH:* ${cnh}\n✅ *Status:* ${assoc.isExempt ? 'Ativo (Isento pela Diretoria)' : assoc.status === 'ativo' ? 'Ativo / Regular' : 'Pendente'}\n\n🔗 *Acesse sua Carteira e QR Code Oficial de Validação:*\n${validationUrl}\n\n_AIAPE - Fortalecendo os Instrutores de Trânsito de Pernambuco_`;
+
+      case 'payment_reminder':
+        return `💳 *LEMBRETE DE CONTRIBUIÇÃO ASSOCIATIVA - AIAPE*\n\nOlá, Instrutor(a) *${assoc.name}*!\n\nLembramos sobre a mensalidade associativa da AIAPE no valor de *${formatCurrency(assoc.monthlyFee || associationConfig.defaultMonthlyFee || 70)}* (Vencimento: dia ${assoc.dueDay || 30}).\n\n🔑 *Chave PIX:* ${pixKey}\n🏛️ *Favorecido:* AIAPE - Associação dos Instrutores de Trânsito PE\n\nApós realizar a transferência, por favor envie o comprovante por aqui para darmos a baixa imediata e manter sua Carteira Digital e convênios 100% ativos!\n\n_Agradecemos sua contribuição com a nossa categoria!_`;
+
+      case 'password':
+        return `🔑 *DADOS DE ACESSO AO PORTAL DO ASSOCIADO - AIAPE*\n\nOlá, *${assoc.name}*!\n\nSeus dados para login na Área do Associado AIAPE:\n\n📋 *Usuário (CPF):* ${assoc.document || 'Seu CPF cadastrado'}\n🔒 *Senha:* ${assoc.password || '(use os 6 dígitos do seu CPF ou solicite redefinição)'}\n🌐 *Link de Acesso:* ${origin}\n\nNo portal você tem acesso à sua carteirinha digital, comprovantes, pedidos de apoio e convênios exclusivos.`;
+
+      case 'receipt':
+        return `🧾 *RECIBO DE QUITAÇÃO DE MENSALIDADE - AIAPE*\n\nConfirmamos o recebimento da mensalidade associativa do(a) instrutor(a) *${assoc.name}*, CPF *${assoc.document || 'N/A'}*.\n\n💰 *Valor Pago:* ${formatCurrency(assoc.monthlyFee || 70)}\n📅 *Referência / Data:* ${assoc.lastPaymentMonth || 'Mensalidade Social'}\n✅ *Status:* Quitado com sucesso!\n\nSua filiação e carteirinha digital seguem regulares.\n_AIAPE - Diretoria e Tesouraria_`;
+
+      case 'exemption':
+        return `🎉 *COMUNICADO OFICIAL: ISENÇÃO DE TAXA AIAPE*\n\nPrezado(a) Instrutor(a) *${assoc.name}*,\n\nA Diretoria Executiva da AIAPE informa a concessão de *ISENÇÃO DE MENSALIDADE* em seu cadastro.\n\n🏆 *Motivo:* ${assoc.exemptionInfo?.reason || 'Premiação de Destaque / Reconhecimento da Categoria'}\n⏳ *Validade:* ${assoc.exemptionInfo?.endDate || 'Período Ativo'}\n💰 *Valor:* R$ 0,00\n\nSua Carteira Digital permanece *100% ATIVA* para todos os benefícios.\n\n🌐 Acesse: ${origin}`;
+
+      default:
+        return `Olá, *${assoc.name}*! Entramos em contato da AIAPE.`;
+    }
+  };
+
+  const openWhatsAppModal = (
+    assoc: Associate,
+    template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption' = 'general'
+  ) => {
+    setWhatsAppModalAssociate(assoc);
+    setWhatsAppPhone(assoc.phone || '');
+    setWhatsAppTemplate(template);
+    setWhatsAppCustomText(getWhatsAppTemplateMessage(assoc, template));
+    setWhatsAppCopied(false);
+  };
+
+  const handleSwitchWhatsAppTemplate = (template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption') => {
+    if (!whatsAppModalAssociate) return;
+    setWhatsAppTemplate(template);
+    setWhatsAppCustomText(getWhatsAppTemplateMessage(whatsAppModalAssociate, template));
+    setWhatsAppCopied(false);
+  };
+
+  const handleSendWhatsAppDirect = (phoneNum: string, text: string) => {
+    const cleanPhone = (phoneNum || '').replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(text)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+    window.open(url, '_blank');
+  };
+
+  const handleCopyWhatsAppMessage = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setWhatsAppCopied(true);
+    setTimeout(() => setWhatsAppCopied(false), 2500);
   };
 
   const handleGenerateRandomPassword = (target: 'modal' | 'form') => {
@@ -450,10 +535,20 @@ export function AssociateManagement({
 
   // Filtered associates
   const filteredAssociates = associates.filter((a) => {
-    const matchesSearch = 
-      a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.document.includes(searchTerm) ||
-      a.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const termClean = searchTerm.trim().toLowerCase();
+    const termDigits = searchTerm.replace(/\D/g, '');
+    const docDigits = (a.document || '').replace(/\D/g, '');
+    const phoneDigits = (a.phone || '').replace(/\D/g, '');
+
+    const matchesSearch = !termClean ||
+      a.name.toLowerCase().includes(termClean) ||
+      (a.document && a.document.toLowerCase().includes(termClean)) ||
+      (termDigits && docDigits.includes(termDigits)) ||
+      (termDigits && phoneDigits.includes(termDigits)) ||
+      (a.email && a.email.toLowerCase().includes(termClean)) ||
+      (a.registrationNumber && a.registrationNumber.toLowerCase().includes(termClean)) ||
+      (a.senatranCredential && a.senatranCredential.toLowerCase().includes(termClean)) ||
+      (a.notes && a.notes.toLowerCase().includes(termClean));
 
     const matchesStatus = statusFilter === 'todos' 
       ? true 
@@ -503,6 +598,28 @@ export function AssociateManagement({
 
   const pendingAssociates = associates.filter(a => a.status === 'pendente');
 
+  const handleBatchImport = async (newAssocs: Omit<Associate, 'id'>[], updateExisting: boolean) => {
+    if (onBatchImportAssociates) {
+      return await onBatchImportAssociates(newAssocs, updateExisting);
+    }
+    let imported = 0;
+    let updated = 0;
+    for (const assocData of newAssocs) {
+      const cleanDoc = (assocData.document || '').replace(/\D/g, '');
+      const existing = associates.find(a => (a.document || '').replace(/\D/g, '') === cleanDoc);
+      if (existing) {
+        if (updateExisting) {
+          onUpdateAssociate({ ...existing, ...assocData });
+          updated++;
+        }
+      } else {
+        onAddAssociate(assocData);
+        imported++;
+      }
+    }
+    return { imported, updated };
+  };
+
   const getPublicLink = () => {
     if (typeof window !== 'undefined') {
       return `${window.location.origin}${window.location.pathname}?autocadastro=true`;
@@ -538,11 +655,20 @@ export function AssociateManagement({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            title="Importar planilha do Excel (.xlsx, .csv) ou respostas do Google Forms"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+            <span>Importar do Excel / Forms</span>
+          </button>
+
+          <button
             onClick={() => setIsRequestsModalOpen(true)}
             className="flex items-center justify-center gap-2 px-3.5 py-2 bg-indigo-950/80 hover:bg-indigo-900/90 border border-indigo-700/60 text-indigo-300 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-xs relative"
           >
             <MessageCircle className="w-4 h-4 text-indigo-400" />
-            <span>Solicitações dos Associados</span>
+            <span>Solicitações</span>
             {requests.length > 0 && (
               <span className="bg-indigo-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
                 {requests.length}
@@ -754,7 +880,32 @@ export function AssociateManagement({
                               </span>
                             ) : null}
                             {assoc.document && <span>CPF: {assoc.document}</span>}
-                            {assoc.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" /> {assoc.phone}</span>}
+                            {assoc.phone ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openWhatsAppModal(assoc, 'general');
+                                }}
+                                title={`Abrir Central de WhatsApp com ${assoc.name}`}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-600 hover:text-white border border-emerald-500/30 px-1.5 py-0.5 rounded-md transition-all cursor-pointer group shadow-2xs"
+                              >
+                                <MessageCircle className="w-2.5 h-2.5 text-emerald-400 group-hover:text-white shrink-0" />
+                                <span>{assoc.phone}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(assoc);
+                                }}
+                                title="Adicionar Telefone / WhatsApp"
+                                className="inline-flex items-center gap-1 text-[9px] text-slate-500 hover:text-emerald-400 transition-colors"
+                              >
+                                <Phone className="w-2.5 h-2.5" /> + Telefone
+                              </button>
+                            )}
                           </div>
                           {assoc.documents && (
                             <div className="flex items-center gap-1.5 mt-1">
@@ -812,6 +963,14 @@ export function AssociateManagement({
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openWhatsAppModal(assoc, 'general')}
+                          title={`Abrir Central de WhatsApp com ${assoc.name} (Cobrança PIX, Carteirinha, Senha, Recibo)`}
+                          className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg transition-all cursor-pointer shadow-xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </button>
+
                         <button
                           onClick={() => setCardModalAssociate(assoc)}
                           title="Visualizar e Imprimir Carteira Digital do Associado (AIAPE)"
@@ -897,10 +1056,25 @@ export function AssociateManagement({
               className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
             >
               <div className="px-6 py-4 bg-slate-800/80 border-b border-slate-700/80 flex items-center justify-between">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <UserPlus className="w-5 h-5 text-blue-400" />
-                  {editingAssociate ? 'Editar Associado' : 'Novo Associado'}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-blue-400" />
+                    {editingAssociate ? 'Editar Associado' : 'Novo Associado'}
+                  </h3>
+                  {!editingAssociate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddModalOpen(false);
+                        setIsImportModalOpen(true);
+                      }}
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg font-semibold cursor-pointer ml-2 flex items-center gap-1"
+                    >
+                      <FileSpreadsheet className="w-3 h-3" />
+                      <span>Importar do Excel</span>
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={() => setIsAddModalOpen(false)}
                   className="text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -935,14 +1109,55 @@ export function AssociateManagement({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Telefone / WhatsApp</label>
-                    <input
-                      type="text"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="(11) 98765-4321"
-                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-blue-500"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-300">Telefone / WhatsApp</label>
+                      {formData.phone && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const clean = formData.phone.replace(/\D/g, '');
+                            const withCountry = clean.length <= 11 ? `55${clean}` : clean;
+                            const text = `Olá, *${formData.name || 'Instrutor(a)'}*! Entramos em contato da AIAPE.`;
+                            window.open(`https://api.whatsapp.com/send?phone=${withCountry}&text=${encodeURIComponent(text)}`, '_blank');
+                          }}
+                          className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Testar / Iniciar conversa no WhatsApp"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <span>Abrir WhatsApp</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          placeholder="(81) 98765-4321"
+                          className="w-full bg-slate-800 border border-slate-700 text-xs text-white pl-3 pr-8 py-2 rounded-lg focus:outline-hidden focus:border-emerald-500"
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+                      </div>
+                      {formData.phone && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const clean = formData.phone.replace(/\D/g, '');
+                            const withCountry = clean.length <= 11 ? `55${clean}` : clean;
+                            const text = `Olá, *${formData.name || 'Instrutor(a)'}*! Entramos em contato da AIAPE.`;
+                            window.open(`https://api.whatsapp.com/send?phone=${withCountry}&text=${encodeURIComponent(text)}`, '_blank');
+                          }}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-md shadow-emerald-600/20"
+                          title="Abrir WhatsApp com este número"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span className="hidden sm:inline">WhatsApp</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1392,20 +1607,35 @@ export function AssociateManagement({
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200">
                   <button
-                    onClick={() => setReceiptAssociate(null)}
-                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      const assoc = receiptAssociate;
+                      setReceiptAssociate(null);
+                      openWhatsAppModal(assoc, 'receipt');
+                    }}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-700/20"
                   >
-                    Fechar
+                    <MessageCircle className="w-4 h-4" />
+                    Enviar Recibo via WhatsApp
                   </button>
-                  <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    Imprimir Recibo
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setReceiptAssociate(null)}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Fechar
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" />
+                      Imprimir Recibo
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -2055,6 +2285,242 @@ export function AssociateManagement({
                   </div>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+        {/* Import Excel / Forms Modal */}
+        {isImportModalOpen && (
+          <AssociateImportModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            existingAssociates={associates}
+            onBatchImport={handleBatchImport}
+            associationConfig={associationConfig}
+          />
+        )}
+
+        {/* Modal Central de Mensagens WhatsApp AIAPE */}
+        {whatsAppModalAssociate && (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-slate-900 border-2 border-emerald-500/40 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative max-h-[92vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-md">
+                    <MessageCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      WhatsApp Oficial AIAPE
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Disparo de mensagens, carteirinha, cobrança PIX e recibos
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWhatsAppModalAssociate(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Informações do Destinatário */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                      Destinatário / Associado
+                    </span>
+                    <h4 className="text-sm font-black text-white">{whatsAppModalAssociate.name}</h4>
+                  </div>
+                  <span className="text-[10px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded-full">
+                    {whatsAppModalAssociate.category}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                      Telefone / WhatsApp Destino
+                    </label>
+                    <div className="flex gap-1.5 items-center">
+                      <input
+                        type="text"
+                        value={whatsAppPhone}
+                        onChange={(e) => setWhatsAppPhone(e.target.value)}
+                        placeholder="(81) 98765-4321"
+                        className="bg-slate-900 border border-slate-700 text-xs font-mono text-emerald-400 px-2.5 py-1.5 rounded-lg w-full focus:outline-hidden focus:border-emerald-500 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                      CPF / Documento
+                    </span>
+                    <span className="text-xs font-mono text-slate-300 bg-slate-900 px-2.5 py-1.5 rounded-lg block border border-slate-800">
+                      {whatsAppModalAssociate.document || 'Não informado'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seletor de Modelos de Mensagens */}
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5 flex items-center justify-between">
+                  <span>Escolha o Modelo de Mensagem:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Pronto para 1-clique</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('general')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'general'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>💬</span>
+                    <span className="truncate">Geral / Contato</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('card')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'card'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>🪪</span>
+                    <span className="truncate">Carteira Digital</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('payment_reminder')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'payment_reminder'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>💳</span>
+                    <span className="truncate">Cobrança PIX</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('password')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'password'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>🔑</span>
+                    <span className="truncate">Login / Senha</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('receipt')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'receipt'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>🧾</span>
+                    <span className="truncate">Recibo Quitado</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('exemption')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'exemption'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>🎁</span>
+                    <span className="truncate">Isenção Taxa</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Caixa de Texto Editável */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-300">
+                    Mensagem a Enviar (Personalizável):
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    {whatsAppCustomText.length} caracteres
+                  </span>
+                </div>
+                <textarea
+                  rows={6}
+                  value={whatsAppCustomText}
+                  onChange={(e) => setWhatsAppCustomText(e.target.value)}
+                  placeholder="Digite a mensagem personalizada..."
+                  className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-100 p-3 rounded-xl focus:outline-hidden focus:border-emerald-500 font-sans leading-relaxed resize-y"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Dica: Você pode usar *texto em negrito*, _itálico_ ou `código` no WhatsApp.
+                </p>
+              </div>
+
+              {/* Rodapé e Ações */}
+              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyWhatsAppMessage(whatsAppCustomText)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {whatsAppCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400">Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 text-blue-400" />
+                      <span>Copiar Texto</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWhatsAppModalAssociate(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsAppDirect(whatsAppPhone, whatsAppCustomText)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Enviar no WhatsApp</span>
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

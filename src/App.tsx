@@ -59,6 +59,7 @@ import { AssociatePortal } from './components/AssociatePortal';
 import { AssociateLoginModal } from './components/AssociateLoginModal';
 import { PublicValidation } from './components/PublicValidation';
 import { AiapeLogo } from './components/AiapeLogo';
+import { CloudSyncModal } from './components/CloudSyncModal';
 import {
   auth,
   db,
@@ -106,8 +107,48 @@ const safeRemoveLocalStorage = (key: string): void => {
   }
 };
 
+// Helper to sanitize associate payloads for Firestore storage (ensures documents never exceed 1MB limit)
+export function sanitizeAssociateForFirestore(assoc: Associate): Associate {
+  const sanitized = { ...assoc };
+  if (sanitized.documents) {
+    const docs = { ...sanitized.documents };
+    // If base64 data URLs are overly large (> 250KB each), preserve file names and info
+    if (docs.cnhUrl && docs.cnhUrl.length > 250000) {
+      docs.cnhUrl = '';
+    }
+    if (docs.crlvUrl && docs.crlvUrl.length > 250000) {
+      docs.crlvUrl = '';
+    }
+    if (docs.senatranUrl && docs.senatranUrl.length > 250000) {
+      docs.senatranUrl = '';
+    }
+    sanitized.documents = docs;
+  }
+  return sanitized;
+}
+
 // Initial default data for Association System
-const INITIAL_ASSOCIATES: Associate[] = [];
+const INITIAL_ASSOCIATES: Associate[] = [
+  {
+    id: 'assoc-58414720463',
+    name: 'Instrutor Associado',
+    document: '584.147.204-63',
+    email: 'associado584@aiape.org.br',
+    phone: '(81) 98888-0000',
+    category: 'Membro Efetivo',
+    status: 'ativo',
+    monthlyFee: 70,
+    dueDay: 30,
+    membershipDate: '2026-08-19',
+    birthDate: '1998-10-13',
+    password: '131098',
+    registrationNumber: 'AIAPE-5841',
+    validityDate: 'DEZ/2026',
+    cnhCategory: 'AB',
+    senatranCredential: 'SENATRAN: 584147',
+    notes: 'Cadastro oficializado e sincronizado no banco de dados com senha de acesso ativa.'
+  }
+];
 const INITIAL_EVENTS: AssociationEvent[] = [];
 const INITIAL_TRANSACTIONS: Transaction[] = [];
 
@@ -336,6 +377,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<'sincronizado' | 'sincronizando' | 'erro'>('sincronizando');
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   
   // Auth Form State
   const [showAuthForm, setShowAuthForm] = useState(false);
@@ -343,6 +385,20 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [authError, setAuthError] = useState('');
+
+  // Cloud Sync Modal State
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+
+  // Helper to handle Firestore errors safely without breaking the UI
+  const handleFirebaseError = (err: any) => {
+    const errMsg = err?.message || String(err);
+    if (err?.code === 'resource-exhausted' || errMsg.includes('Quota exceeded') || errMsg.includes('resource-exhausted')) {
+      setIsQuotaExceeded(true);
+      setSyncStatus('erro');
+    } else {
+      setSyncStatus('erro');
+    }
+  };
 
   // Save associates to localStorage when changed
   useEffect(() => {
@@ -375,7 +431,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Firebase Auth Observer & Real-time Cloud Synchronization
+  // Firebase Auth Observer & Real-time Cloud Synchronization (Read-only listeners to avoid write recursion)
   useEffect(() => {
     let unsubs: (() => void)[] = [];
 
@@ -393,21 +449,21 @@ export default function App() {
           await signInAnonymously(auth);
         } catch (err) {
           console.warn('Login anônimo indisponível. Operando com cache local.', err);
-          setSyncStatus('erro');
+          handleFirebaseError(err);
         }
       }
 
       // Establish real-time Firestore listeners on shared collections
       setSyncStatus('sincronizando');
       try {
-        // 1. Synchronize Associates
+        // 1. Synchronize Associates (pure read-only listener)
         const associatesRef = collection(db, 'associates');
         const unsubAssociates = onSnapshot(associatesRef, (snapshot) => {
           const list: Associate[] = [];
           snapshot.forEach(docSnap => {
             list.push({ id: docSnap.id, ...docSnap.data() } as Associate);
           });
-          
+
           if (list.length > 0) {
             // Sort by registration / membership date desc
             list.sort((a, b) => {
@@ -417,26 +473,11 @@ export default function App() {
             });
             setAssociates(list);
             safeSetLocalStorage('assoc_associates', JSON.stringify(list));
-          } else {
-            // If cloud is empty and we have local associates, initialize cloud
-            const savedLocal = safeGetLocalStorage('assoc_associates');
-            if (savedLocal) {
-              try {
-                const parsed = JSON.parse(savedLocal);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  parsed.forEach(async (assoc: Associate) => {
-                    await setDoc(doc(db, 'associates', assoc.id), assoc);
-                  });
-                }
-              } catch (e) {
-                console.warn('Erro ao migrar associados locais para o Firebase:', e);
-              }
-            }
           }
           setSyncStatus('sincronizado');
         }, (err) => {
           console.warn('Erro ao escutar associados no Firestore:', err);
-          setSyncStatus('erro');
+          handleFirebaseError(err);
         });
         unsubs.push(unsubAssociates);
 
@@ -463,7 +504,7 @@ export default function App() {
           setSyncStatus('sincronizado');
         }, (err) => {
           console.warn('Erro ao escutar transações no Firestore:', err);
-          setSyncStatus('erro');
+          handleFirebaseError(err);
         });
         unsubs.push(unsubTransactions);
 
@@ -480,6 +521,7 @@ export default function App() {
           }
         }, (err) => {
           console.warn('Erro ao escutar eventos:', err);
+          handleFirebaseError(err);
         });
         unsubs.push(unsubEvents);
 
@@ -496,6 +538,7 @@ export default function App() {
           }
         }, (err) => {
           console.warn('Erro ao escutar solicitações:', err);
+          handleFirebaseError(err);
         });
         unsubs.push(unsubRequests);
 
@@ -509,18 +552,16 @@ export default function App() {
               ...data
             }));
             safeSetLocalStorage('assoc_config', JSON.stringify(data));
-          } else {
-            // Save initial config to cloud
-            setDoc(configDocRef, associationConfig, { merge: true }).catch(console.warn);
           }
         }, (err) => {
           console.warn('Erro ao escutar configurações:', err);
+          handleFirebaseError(err);
         });
         unsubs.push(unsubConfig);
 
       } catch (setupErr) {
         console.error('Falha ao configurar sincronização em nuvem:', setupErr);
-        setSyncStatus('erro');
+        handleFirebaseError(setupErr);
       }
     });
 
@@ -565,7 +606,7 @@ export default function App() {
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao salvar transação no Firestore:', err);
-      setSyncStatus('erro');
+      handleFirebaseError(err);
     }
   };
 
@@ -591,7 +632,7 @@ export default function App() {
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
-      setSyncStatus('erro');
+      handleFirebaseError(err);
     }
   };
 
@@ -606,31 +647,39 @@ export default function App() {
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao excluir do Firestore:', err);
-      setSyncStatus('erro');
+      handleFirebaseError(err);
     }
   };
 
   // Associates Handlers (Synchronized with Firestore for all notebooks & smartphones)
-  const handleAddAssociate = (assocData: Omit<Associate, 'id'>): Associate => {
+  const handleAddAssociate = async (assocData: Omit<Associate, 'id'>): Promise<Associate> => {
+    const cleanDoc = (assocData.document || '').replace(/\D/g, '');
+    const newId = cleanDoc ? `assoc-${cleanDoc}` : `assoc-${Date.now()}`;
+
     const newAssoc: Associate = {
       ...assocData,
-      id: `assoc-${Date.now()}`
+      id: newId
     };
 
-    // Update locally
-    setAssociates(prev => [newAssoc, ...prev]);
+    // Update locally immediately
+    setAssociates(prev => {
+      const filtered = prev.filter(a => a.id !== newId && (cleanDoc ? (a.document || '').replace(/\D/g, '') !== cleanDoc : true));
+      return [newAssoc, ...filtered];
+    });
     safeSetLocalStorage('assoc_associates', JSON.stringify([newAssoc, ...associates]));
+
+    // Sanitize to prevent 1MB Firestore limit crash
+    const sanitized = sanitizeAssociateForFirestore(newAssoc);
 
     // Save to Firestore Cloud so notebook and all devices see it immediately
     setSyncStatus('sincronizando');
-    setDoc(doc(db, 'associates', newAssoc.id), newAssoc)
-      .then(() => {
-        setSyncStatus('sincronizado');
-      })
-      .catch((err) => {
-        console.error('Erro ao salvar associado no Firestore:', err);
-        setSyncStatus('erro');
-      });
+    try {
+      await setDoc(doc(db, 'associates', newAssoc.id), sanitized, { merge: true });
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao salvar associado no Firestore:', err);
+      handleFirebaseError(err);
+    }
 
     return newAssoc;
   };
@@ -644,13 +693,15 @@ export default function App() {
       setLoggedAssociate(updatedAssoc);
     }
 
+    const sanitized = sanitizeAssociateForFirestore(updatedAssoc);
+
     setSyncStatus('sincronizando');
     try {
-      await setDoc(doc(db, 'associates', updatedAssoc.id), updatedAssoc, { merge: true });
+      await setDoc(doc(db, 'associates', updatedAssoc.id), sanitized, { merge: true });
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao atualizar associado no Firestore:', err);
-      setSyncStatus('erro');
+      handleFirebaseError(err);
     }
   };
 
@@ -665,8 +716,169 @@ export default function App() {
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao excluir associado no Firestore:', err);
-      setSyncStatus('erro');
+      handleFirebaseError(err);
     }
+  };
+
+  // Batch Import Associates from Excel / Google Forms with Firestore batch write optimization
+  const handleBatchImportAssociates = async (
+    newAssocs: Omit<Associate, 'id'>[],
+    updateExisting: boolean
+  ): Promise<{ imported: number; updated: number }> => {
+    let imported = 0;
+    let updated = 0;
+    setSyncStatus('sincronizando');
+
+    const updatedLocalList = [...associates];
+    const itemsToWrite: { id: string; data: any }[] = [];
+
+    for (const assocData of newAssocs) {
+      const cleanDoc = (assocData.document || '').replace(/\D/g, '');
+      const existingIndex = updatedLocalList.findIndex(a => (a.document || '').replace(/\D/g, '') === cleanDoc);
+
+      if (existingIndex >= 0) {
+        if (updateExisting) {
+          const merged: Associate = {
+            ...updatedLocalList[existingIndex],
+            ...assocData,
+            id: updatedLocalList[existingIndex].id
+          };
+          updatedLocalList[existingIndex] = merged;
+          itemsToWrite.push({ id: merged.id, data: sanitizeAssociateForFirestore(merged) });
+          updated++;
+        }
+      } else {
+        const newId = cleanDoc ? `assoc-${cleanDoc}` : `assoc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+        const created: Associate = {
+          ...assocData,
+          id: newId
+        };
+        updatedLocalList.unshift(created);
+        itemsToWrite.push({ id: newId, data: sanitizeAssociateForFirestore(created) });
+        imported++;
+      }
+    }
+
+    // Update local state and storage immediately
+    setAssociates(updatedLocalList);
+    safeSetLocalStorage('assoc_associates', JSON.stringify(updatedLocalList));
+
+    // Batch commit to Firestore in chunks of 450 items
+    try {
+      const CHUNK_SIZE = 450;
+      for (let i = 0; i < itemsToWrite.length; i += CHUNK_SIZE) {
+        const chunk = itemsToWrite.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach(item => {
+          batch.set(doc(db, 'associates', item.id), item.data, { merge: true });
+        });
+        await batch.commit();
+      }
+      setSyncStatus('sincronizado');
+    } catch (err) {
+      console.error('Erro ao salvar lote de associados no Firestore:', err);
+      handleFirebaseError(err);
+    }
+
+    return { imported, updated };
+  };
+
+  // Force Full Synchronization from local memory to Firestore using writeBatch
+  const handleForceSyncAllLocalToCloud = async (): Promise<{ associates: number; transactions: number; events: number; requests: number }> => {
+    setSyncStatus('sincronizando');
+    let assocCount = 0;
+    let txCount = 0;
+    let eventCount = 0;
+    let reqCount = 0;
+
+    try {
+      // 1. Sync associates
+      const localAssocs = safeGetLocalStorage('assoc_associates');
+      if (localAssocs) {
+        const parsed: Associate[] = JSON.parse(localAssocs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const CHUNK_SIZE = 450;
+          for (let i = 0; i < parsed.length; i += CHUNK_SIZE) {
+            const chunk = parsed.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(a => {
+              if (a && a.id) {
+                batch.set(doc(db, 'associates', a.id), sanitizeAssociateForFirestore(a), { merge: true });
+                assocCount++;
+              }
+            });
+            await batch.commit();
+          }
+        }
+      }
+
+      // 2. Sync transactions
+      const localTx = safeGetLocalStorage('assoc_transactions');
+      if (localTx) {
+        const parsed: Transaction[] = JSON.parse(localTx);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const CHUNK_SIZE = 450;
+          for (let i = 0; i < parsed.length; i += CHUNK_SIZE) {
+            const chunk = parsed.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(t => {
+              if (t && t.id) {
+                batch.set(doc(db, 'transactions', t.id), t, { merge: true });
+                txCount++;
+              }
+            });
+            await batch.commit();
+          }
+        }
+      }
+
+      // 3. Sync events
+      const localEvs = safeGetLocalStorage('assoc_events');
+      if (localEvs) {
+        const parsed: AssociationEvent[] = JSON.parse(localEvs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const batch = writeBatch(db);
+          parsed.forEach(ev => {
+            if (ev && ev.id) {
+              batch.set(doc(db, 'events', ev.id), ev, { merge: true });
+              eventCount++;
+            }
+          });
+          await batch.commit();
+        }
+      }
+
+      // 4. Sync requests
+      const localReqs = safeGetLocalStorage('assoc_requests');
+      if (localReqs) {
+        const parsed: AssociateRequest[] = JSON.parse(localReqs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const batch = writeBatch(db);
+          parsed.forEach(req => {
+            if (req && req.id) {
+              batch.set(doc(db, 'requests', req.id), req, { merge: true });
+              reqCount++;
+            }
+          });
+          await batch.commit();
+        }
+      }
+
+      // 5. Sync config
+      const localCfg = safeGetLocalStorage('assoc_config');
+      if (localCfg) {
+        const parsed = JSON.parse(localCfg);
+        await setDoc(doc(db, 'config', 'association'), parsed, { merge: true });
+      }
+
+      setSyncStatus('sincronizado');
+      setIsQuotaExceeded(false);
+    } catch (err: any) {
+      console.error('Erro na sincronização manual:', err);
+      handleFirebaseError(err);
+    }
+
+    return { associates: assocCount, transactions: txCount, events: eventCount, requests: reqCount };
   };
 
   // Register Dues Payment (Baixa de Mensalidade)
@@ -719,6 +931,7 @@ export default function App() {
       await setDoc(doc(db, 'events', newEvent.id), newEvent);
     } catch (err) {
       console.error('Erro ao salvar evento:', err);
+      handleFirebaseError(err);
     }
   };
 
@@ -728,6 +941,7 @@ export default function App() {
       await setDoc(doc(db, 'events', updatedEvent.id), updatedEvent, { merge: true });
     } catch (err) {
       console.error('Erro ao atualizar evento:', err);
+      handleFirebaseError(err);
     }
   };
 
@@ -737,6 +951,7 @@ export default function App() {
       await deleteDoc(doc(db, 'events', id));
     } catch (err) {
       console.error('Erro ao excluir evento:', err);
+      handleFirebaseError(err);
     }
   };
 
@@ -753,6 +968,7 @@ export default function App() {
       });
     } catch (err) {
       console.error('Erro ao atualizar solicitação no Firestore:', err);
+      handleFirebaseError(err);
     }
   };
 
@@ -764,6 +980,7 @@ export default function App() {
       await setDoc(doc(db, 'config', 'association'), newConfig, { merge: true });
     } catch (err) {
       console.error('Erro ao salvar configuração no Firestore:', err);
+      handleFirebaseError(err);
     }
   };
 
@@ -935,20 +1152,21 @@ export default function App() {
             </select>
           </div>
 
-          <div 
+          <button 
+            onClick={() => setIsSyncModalOpen(true)}
             title={
               syncStatus === 'sincronizado' 
-                ? 'Nuvem Conectada e Sincronizada em Tempo Real (Notebook, Celulares e Vercel)' 
+                ? 'Nuvem Conectada e Sincronizada em Tempo Real. Clique para abrir o Gerenciador de Sincronização.' 
                 : syncStatus === 'sincronizando' 
                 ? 'Sincronizando dados com a nuvem...' 
-                : 'Modo Offline / Falha na Nuvem'
+                : 'Modo Offline / Falha na Nuvem. Clique para sincronizar agora.'
             }
-            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer hover:brightness-110 ${
               syncStatus === 'sincronizado'
-                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20'
                 : syncStatus === 'sincronizando'
-                ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                ? 'bg-amber-500/10 text-amber-300 border-amber-500/20 hover:bg-amber-500/20'
+                : 'bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20'
             }`}
           >
             {syncStatus === 'sincronizado' ? (
@@ -959,9 +1177,9 @@ export default function App() {
               <CloudOff className="w-3.5 h-3.5 text-rose-400" />
             )}
             <span className="hidden md:inline text-[11px]">
-              {syncStatus === 'sincronizado' ? 'Nuvem Ativa' : syncStatus === 'sincronizando' ? 'Sincronizando...' : 'Offline'}
+              {syncStatus === 'sincronizado' ? 'Nuvem Ativa' : syncStatus === 'sincronizando' ? 'Sincronizando...' : 'Sincronizar'}
             </span>
-          </div>
+          </button>
 
           <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 bg-slate-900/60 border border-slate-800 px-3 py-1.5 rounded-xl">
             <Clock className="w-3.5 h-3.5 text-emerald-400" />
@@ -1130,6 +1348,42 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
+          {/* Quota Exceeded Notification Banner */}
+          {isQuotaExceeded && (
+            <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 text-amber-200 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-amber-950/20">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-xl text-amber-400 shrink-0 mt-0.5">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div className="space-y-1 text-xs">
+                  <p className="font-bold text-amber-300">
+                    Limite de Cota Gratuita do Firestore Atingido (Quota Exceeded)
+                  </p>
+                  <p className="text-slate-300 leading-relaxed">
+                    O aplicativo continua 100% operacional no modo local seguro (cache). Todas as inclusões, mensalidades, emissões de carteirinhas e relatórios funcionam normalmente. As cotas diárias gratuitas do Firebase reiniciam à meia-noite.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                <button
+                  onClick={() => setIsSyncModalOpen(true)}
+                  className="px-3.5 py-2 bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/40 text-amber-200 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                >
+                  Ver Detalhes & Sincronização
+                </button>
+                <a
+                  href="https://console.firebase.google.com/project/gen-lang-client-0135824596/firestore/databases/ai-studio-fluxodecaixainte-f91ed258-3d28-48f3-9a11-5820228e6cba/data?openUpgradeDialog=true"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <span>Firebase Console</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'dashboard' && (
             <AssociationHistory
               associationConfig={associationConfig}
@@ -1161,6 +1415,7 @@ export default function App() {
               onOpenPublicRegister={() => setIsPublicRegisterMode(true)}
               requests={associateRequests}
               onUpdateRequestStatus={handleUpdateRequestStatus}
+              onBatchImportAssociates={handleBatchImportAssociates}
             />
           )}
 
@@ -1224,10 +1479,26 @@ export default function App() {
             <AssociationSettings
               config={associationConfig}
               onSaveConfig={handleSaveConfig}
+              onOpenSyncModal={() => setIsSyncModalOpen(true)}
+              syncStatus={syncStatus}
             />
           )}
         </main>
       </div>
+
+      {/* Cloud Sync Manager Modal */}
+      <CloudSyncModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
+        associates={associates}
+        transactions={transactions}
+        events={events}
+        requests={associateRequests}
+        config={associationConfig}
+        syncStatus={syncStatus}
+        isQuotaExceeded={isQuotaExceeded}
+        onForceSyncAll={handleForceSyncAllLocalToCloud}
+      />
 
       {/* PIN Verification Modal for Área do ADM / Diretoria */}
       <AnimatePresence>

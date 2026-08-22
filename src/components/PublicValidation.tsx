@@ -29,9 +29,17 @@ export function PublicValidation({
   associationConfig,
   onBack
 }: PublicValidationProps) {
-  const associate = associates.find(
-    a => a.id === associateId || a.registrationNumber === associateId || a.document === associateId
-  );
+  const cleanSearch = (associateId || '').trim().toLowerCase();
+  const searchDigits = (associateId || '').replace(/\D/g, '');
+
+  const associate = associates.find(a => {
+    if (a.id === associateId) return true;
+    if (a.registrationNumber && a.registrationNumber.toLowerCase() === cleanSearch) return true;
+    if (a.document === associateId) return true;
+    const docDigits = (a.document || '').replace(/\D/g, '');
+    if (searchDigits && docDigits && (docDigits === searchDigits || searchDigits.includes(docDigits))) return true;
+    return false;
+  });
 
   const regNumber = associate?.registrationNumber || `AIAPE-${associate?.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase() || '2026'}`;
   const senatranNumber = associate?.senatranCredential || 'CADASTRADA NO SISTEMA';

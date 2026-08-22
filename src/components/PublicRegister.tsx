@@ -32,7 +32,7 @@ import { AiapeLogo } from './AiapeLogo';
 
 interface PublicRegisterProps {
   associationConfig: AssociationConfig;
-  onRegisterSuccess: (associate: Omit<Associate, 'id'>) => Associate;
+  onRegisterSuccess: (associate: Omit<Associate, 'id'>) => Promise<Associate> | Associate;
   onBackToDashboard?: () => void;
   onEnterPortalDirectly?: (associate: Associate) => void;
 }
@@ -57,6 +57,9 @@ export function PublicRegister({
     photoUrl: '',
     notes: ''
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // State for CEP lookup
   const [cep, setCep] = useState('');
@@ -206,8 +209,9 @@ export function PublicRegister({
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     if (!formData.name.trim() || !formData.phone.trim()) return;
 
     // Validate mandatory PDF documents
@@ -216,40 +220,48 @@ export function PublicRegister({
       return;
     }
 
-    // Use password entered or fallback to default
-    const finalPassword = formData.password.trim() || `Aiape@${new Date().getFullYear()}`;
+    setIsSubmitting(true);
+    try {
+      // Use password entered or fallback to default
+      const finalPassword = formData.password.trim() || `Aiape@${new Date().getFullYear()}`;
 
-    const newAssociateData: Omit<Associate, 'id'> = {
-      name: formData.name.trim(),
-      document: formData.document.trim(),
-      email: formData.email.trim(),
-      phone: formData.phone.trim(),
-      address: formData.address.trim(),
-      category: formData.category,
-      status: 'ativo', // Allow immediate access upon registration
-      monthlyFee: associationConfig.defaultMonthlyFee || 70,
-      dueDay: associationConfig.defaultDueDay || 30,
-      membershipDate: new Date().toISOString().split('T')[0],
-      birthDate: formData.birthDate || undefined,
-      password: finalPassword,
-      photoUrl: formData.photoUrl || undefined,
-      senatranCredential: formData.senatranCredential.trim() || undefined,
-      cnhCategory: formData.cnhCategory.trim() || 'AB',
-      registrationNumber: `AIAPE-${Math.floor(1000 + Math.random() * 9000)}`,
-      validityDate: 'DEZ/2026',
-      documents: {
-        cnhName: docCnh.name,
-        cnhUrl: docCnh.url,
-        crlvName: docCrlv.name,
-        crlvUrl: docCrlv.url,
-        senatranName: docSenatran.name,
-        senatranUrl: docSenatran.url
-      },
-      notes: formData.notes ? `Auto-cadastro via portal. Mensagem: ${formData.notes}` : 'Auto-cadastro com documentação anexada (CNH, CRLV e Credencial SENATRAN)'
-    };
+      const newAssociateData: Omit<Associate, 'id'> = {
+        name: formData.name.trim(),
+        document: formData.document.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim(),
+        category: formData.category,
+        status: 'ativo', // Allow immediate access upon registration
+        monthlyFee: associationConfig.defaultMonthlyFee || 70,
+        dueDay: associationConfig.defaultDueDay || 30,
+        membershipDate: new Date().toISOString().split('T')[0],
+        birthDate: formData.birthDate || undefined,
+        password: finalPassword,
+        photoUrl: formData.photoUrl || undefined,
+        senatranCredential: formData.senatranCredential.trim() || undefined,
+        cnhCategory: formData.cnhCategory.trim() || 'AB',
+        registrationNumber: `AIAPE-${Math.floor(1000 + Math.random() * 9000)}`,
+        validityDate: 'DEZ/2026',
+        documents: {
+          cnhName: docCnh.name,
+          cnhUrl: docCnh.url,
+          crlvName: docCrlv.name,
+          crlvUrl: docCrlv.url,
+          senatranName: docSenatran.name,
+          senatranUrl: docSenatran.url
+        },
+        notes: formData.notes ? `Auto-cadastro via portal. Mensagem: ${formData.notes}` : 'Auto-cadastro com documentação anexada (CNH, CRLV e Credencial SENATRAN)'
+      };
 
-    const created = onRegisterSuccess(newAssociateData);
-    setCreatedAssociate(created);
+      const created = await onRegisterSuccess(newAssociateData);
+      setCreatedAssociate(created);
+    } catch (err: any) {
+      console.error('Erro ao registrar associado:', err);
+      setSubmitError('Ocorreu uma falha ao salvar os dados no banco. Por favor, tente novamente ou contate a diretoria.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCopyPix = () => {
@@ -717,6 +729,13 @@ export function PublicRegister({
                   />
                 </div>
 
+                {submitError && (
+                  <div className="p-3 bg-rose-500/20 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2 font-semibold">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{submitError}</span>
+                  </div>
+                )}
+
                 <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/80 space-y-2 text-xs">
                   <div className="flex items-center justify-between text-slate-300 font-semibold">
                     <span>Mensalidade Social Sugerida:</span>
@@ -731,10 +750,20 @@ export function PublicRegister({
 
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
+                  disabled={isSubmitting}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-75 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
-                  Cadastrar e Liberar Acesso ao Portal
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Salvando cadastro e liberando acesso...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Cadastrar e Liberar Acesso ao Portal</span>
+                    </>
+                  )}
                 </button>
               </form>
             </motion.div>

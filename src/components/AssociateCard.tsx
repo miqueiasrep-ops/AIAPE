@@ -22,6 +22,7 @@ import {
   RotateCw,
   Edit3,
   Save,
+  MessageCircle,
   X
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -97,6 +98,27 @@ export function AssociateCard({
     navigator.clipboard.writeText(validationUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 3000);
+  };
+
+  const handleShareWhatsApp = () => {
+    const cleanPhone = (associate.phone || '').replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    
+    const text = `🪪 *CARTEIRA DIGITAL OFICIAL - AIAPE*\n\n` +
+      `*Instrutor(a):* ${associate.name}\n` +
+      `*Credencial SENATRAN:* ${senatranNumber}\n` +
+      `*Categoria CNH:* ${cnhCat}\n` +
+      `*Matrícula:* ${regNumber}\n` +
+      `*Validade:* ${validityYear}\n` +
+      `*Status:* ${associate.isExempt ? 'Ativo (Isento pela Diretoria)' : associate.status === 'ativo' ? 'Ativo / Regular' : 'Pendente'}\n\n` +
+      `🔗 *Link de Validação com QR Code Oficial:*\n${validationUrl}\n\n` +
+      `_AIAPE - Associação dos Instrutores de Autoescolas de Pernambuco_`;
+
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(text)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+    window.open(url, '_blank');
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,6 +250,15 @@ export function AssociateCard({
               </button>
             </>
           )}
+
+          <button
+            onClick={handleShareWhatsApp}
+            title="Compartilhar Carteira Digital via WhatsApp"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm shadow-emerald-950"
+          >
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white" />
+            <span>Enviar WhatsApp</span>
+          </button>
 
           <button
             onClick={handlePrint}
