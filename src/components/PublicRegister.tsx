@@ -25,7 +25,11 @@ import {
   AlertCircle,
   FileCheck,
   Search,
-  Loader2
+  Loader2,
+  MessageCircle,
+  Award,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Associate, AssociateCategory, AssociationConfig } from '../types';
 import { AiapeLogo } from './AiapeLogo';
@@ -262,6 +266,34 @@ export function PublicRegister({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSendWelcomeWhatsApp = () => {
+    if (!createdAssociate) return;
+    const cleanPhone = (createdAssociate.phone || '').replace(/\D/g, '');
+    const phoneWithCountry = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aiape.org.br';
+    const validationUrl = `${origin}/?validar=${encodeURIComponent(createdAssociate.id)}`;
+
+    const text = `🎉 *SEJA BEM-VINDO(A) À FAMÍLIA AIAPE!*\n\n` +
+      `Prezado(a) Instrutor(a) *${createdAssociate.name}*,\n\n` +
+      `É uma imensa honra receber você como novo membro associado da *AIAPE - Associação dos Instrutores de Trânsito Autônomos e de Autoescolas de Pernambuco*!\n\n` +
+      `Agradecemos de coração pela sua filiação. Sua chegada fortalece a representatividade da nossa categoria, nos dá mais voz perante os órgãos de trânsito e nos ajuda a conquistar novos direitos e benefícios para todos os instrutores do nosso estado.\n\n` +
+      `📋 *SEUS DADOS DE ACESSO AO PORTAL:*\n` +
+      `• *Nome:* ${createdAssociate.name}\n` +
+      `• *Login / CPF:* ${createdAssociate.document || createdAssociate.email || createdAssociate.phone}\n` +
+      `• *Senha Provisória:* ${createdAssociate.password || 'Aiape@2026'}\n` +
+      `• *Credencial SENATRAN:* ${createdAssociate.senatranCredential || 'Cadastrada'}\n` +
+      `• *Categoria CNH:* ${createdAssociate.cnhCategory || 'AB'}\n\n` +
+      `🪪 *Link de Validação da sua Carteira Digital:*\n${validationUrl}\n\n` +
+      `🌐 *Acesse o Portal do Associado:* ${origin}\n\n` +
+      `_Conte sempre com a Diretoria da AIAPE. Juntos somos mais fortes!_`;
+
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodeURIComponent(text)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+
+    window.open(url, '_blank');
   };
 
   const handleCopyPix = () => {
@@ -772,28 +804,76 @@ export function PublicRegister({
               key="success"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl text-center"
+              className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl text-center relative overflow-hidden"
             >
-              <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-10 h-10" />
+              {/* Decorative top ambient light */}
+              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-32 bg-emerald-500/15 blur-3xl pointer-events-none rounded-full" />
+
+              {/* Badge & Icon */}
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-full">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Filiação Concluída & Acesso Liberado
+                </div>
+
+                <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 border-2 border-emerald-500/40 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+                  <CheckCircle2 className="w-9 h-9" />
+                </div>
+
+                <div>
+                  <h2 className="text-2xl font-black text-white tracking-tight">
+                    🎉 Seja Muito Bem-Vindo(a) à AIAPE!
+                  </h2>
+                  <p className="text-sm font-semibold text-emerald-400 mt-1">
+                    Instrutor(a) {createdAssociate.name}
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <h2 className="text-xl font-bold text-white">Cadastro Realizado & Acesso Liberado!</h2>
-                <p className="text-xs text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
-                  Bem-vindo(a) à <strong className="text-white">{associationConfig.name}</strong>. Seus dados de acesso à Área do Associado foram criados e liberados com sucesso.
+              {/* Mensagem Oficial de Agradecimento da Diretoria */}
+              <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl p-5 text-left space-y-3 shadow-inner relative">
+                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-extrabold text-amber-300 uppercase tracking-wide">
+                      Mensagem Oficial da Diretoria Executiva
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">AIAPE • PE</span>
+                </div>
+
+                <p className="text-xs text-slate-200 leading-relaxed">
+                  Prezado(a) Instrutor(a) <strong className="text-amber-300">{createdAssociate.name}</strong>,
                 </p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  É com imensa honra e alegria que a <strong className="text-white">AIAPE (Associação dos Instrutores de Trânsito Autônomos e de Autoescolas de Pernambuco)</strong> dá as boas-vindas à sua chegada como membro associado!
+                </p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Agradecemos de coração pela sua filiação e confiança em nossa entidade. Sua participação é fundamental para fortalecer a representatividade da categoria, assegurar o respeito à nossa profissão e impulsionar conquistas históricas para todos os instrutores de trânsito de Pernambuco.
+                </p>
+
+                {/* Badges de Benefícios */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                  <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-lg">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="text-[11px] text-slate-300">Carteira Digital Oficial com QR Code</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-2.5 py-1.5 rounded-lg">
+                    <HeartHandshake className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="text-[11px] text-slate-300">Apoio e Assessoria da Categoria</span>
+                  </div>
+                </div>
               </div>
 
               {/* Login Credentials Box */}
-              <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-slate-950 border border-blue-500/40 rounded-xl p-5 text-left space-y-3 shadow-lg">
+              <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-slate-950 border border-blue-500/40 rounded-2xl p-5 text-left space-y-3 shadow-lg">
                 <div className="flex items-center justify-between border-b border-blue-900/60 pb-2">
                   <h3 className="text-xs font-extrabold text-blue-300 flex items-center gap-1.5 uppercase tracking-wide">
                     <Key className="w-4 h-4 text-blue-400" />
                     Suas Credenciais de Acesso ao Portal do Associado
                   </h3>
                   <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Acesso Ativo
+                    Acesso Liberado
                   </span>
                 </div>
 
@@ -812,48 +892,70 @@ export function PublicRegister({
                   </div>
                 </div>
 
-                {onEnterPortalDirectly && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                  {onEnterPortalDirectly && (
+                    <button
+                      type="button"
+                      onClick={() => onEnterPortalDirectly(createdAssociate)}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Entrar na Área do Associado
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+
                   <button
-                    onClick={() => onEnterPortalDirectly(createdAssociate)}
-                    className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    type="button"
+                    onClick={handleSendWelcomeWhatsApp}
+                    className="w-full py-3 bg-emerald-700/30 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/50 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    title="Enviar dados de boas-vindas e acesso para o WhatsApp"
                   >
-                    <Sparkles className="w-4 h-4" />
-                    Entrar na Área do Associado Agora
-                    <ArrowRight className="w-4 h-4" />
+                    <MessageCircle className="w-4 h-4 text-emerald-400" />
+                    Salvar / Enviar no WhatsApp
                   </button>
-                )}
+                </div>
               </div>
 
-              <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 text-left space-y-3">
+              {/* Resumo do Cadastro */}
+              <div className="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4 text-left space-y-3">
                 <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider border-b border-slate-700 pb-2">
-                  Resumo do Cadastro
+                  Resumo da sua Filiação
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Nome:</span>
+                    <span className="text-slate-400 block text-[10px]">Nome Completo:</span>
                     <span className="font-semibold text-white">{createdAssociate.name}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Categoria:</span>
-                    <span className="font-semibold text-blue-400">{createdAssociate.category}</span>
+                    <span className="text-slate-400 block text-[10px]">Credencial SENATRAN:</span>
+                    <span className="font-semibold text-amber-400">{createdAssociate.senatranCredential || 'Cadastrada'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Telefone:</span>
+                    <span className="text-slate-400 block text-[10px]">Categoria CNH:</span>
+                    <span className="font-semibold text-blue-400">{createdAssociate.cnhCategory || 'AB'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Telefone / WhatsApp:</span>
                     <span className="font-semibold text-white">{createdAssociate.phone}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Mensalidade Padrão:</span>
+                    <span className="text-slate-400 block text-[10px]">Mensalidade Social:</span>
                     <span className="font-semibold text-emerald-400">{formatCurrency(createdAssociate.monthlyFee)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Status:</span>
+                    <span className="font-semibold text-emerald-400">Ativo / Regular</span>
                   </div>
                 </div>
               </div>
 
               {/* Payment Info Box */}
-              <div className="bg-slate-800/80 border border-blue-500/30 rounded-xl p-5 text-left space-y-3">
+              <div className="bg-slate-800/80 border border-blue-500/30 rounded-2xl p-5 text-left space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
                     <CreditCard className="w-4 h-4" />
-                    Dados Bancários da Associação para Pagamento
+                    Chave PIX Oficial para Contribuição Associativa
                   </h3>
                   <button
                     onClick={handleCopyPix}
@@ -864,6 +966,7 @@ export function PublicRegister({
                 </div>
 
                 <div className="text-xs text-slate-300 space-y-1">
+                  <p>• <strong>Chave PIX / CNPJ:</strong> {associationConfig.cnpj || '24.810.192/0001-85'}</p>
                   <p>• <strong>Banco:</strong> {associationConfig.primaryBank || 'Banco do Brasil'}</p>
                   <p>• <strong>Favorecido:</strong> {associationConfig.name}</p>
                   <p>• <strong>Valor da Contribuição:</strong> {formatCurrency(createdAssociate.monthlyFee)}</p>
@@ -872,10 +975,11 @@ export function PublicRegister({
 
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setCreatedAssociate(null)}
                   className="w-full sm:w-auto px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
                 >
-                  Cadastrar Outra Pessoa
+                  Cadastrar Outro Instrutor
                 </button>
               </div>
             </motion.div>

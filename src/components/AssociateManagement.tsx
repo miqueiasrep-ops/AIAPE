@@ -144,7 +144,7 @@ export function AssociateManagement({
   // WhatsApp Central Modal State
   const [whatsAppModalAssociate, setWhatsAppModalAssociate] = useState<Associate | null>(null);
   const [whatsAppPhone, setWhatsAppPhone] = useState<string>('');
-  const [whatsAppTemplate, setWhatsAppTemplate] = useState<'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'>('general');
+  const [whatsAppTemplate, setWhatsAppTemplate] = useState<'general' | 'welcome' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'>('welcome');
   const [whatsAppCustomText, setWhatsAppCustomText] = useState<string>('');
   const [whatsAppCopied, setWhatsAppCopied] = useState<boolean>(false);
 
@@ -271,7 +271,7 @@ export function AssociateManagement({
 
   const getWhatsAppTemplateMessage = (
     assoc: Associate,
-    template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'
+    template: 'general' | 'welcome' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption'
   ) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aiape.org.br';
     const validationUrl = `${origin}/?validar=${encodeURIComponent(assoc.id)}`;
@@ -281,6 +281,21 @@ export function AssociateManagement({
     const pixKey = associationConfig.pixKey || associationConfig.cnpj || '24.810.192/0001-85';
 
     switch (template) {
+      case 'welcome':
+        return `🎉 *SEJA BEM-VINDO(A) À FAMÍLIA AIAPE!*\n\n` +
+          `Prezado(a) Instrutor(a) *${assoc.name}*,\n\n` +
+          `É uma grande honra e alegria receber você como novo membro associado da *AIAPE (Associação dos Instrutores de Autoescolas e de Trânsito de Pernambuco)*!\n\n` +
+          `Agradecemos imensamente pela sua filiação e confiança em nossa entidade. Sua participação fortalece a representatividade da nossa categoria, nos dá mais voz e nos ajuda a conquistar novos direitos para todos os instrutores do estado.\n\n` +
+          `📋 *SEUS DADOS OFICIAIS:*\n` +
+          `• *Registro AIAPE:* ${regNumber}\n` +
+          `• *Credencial SENATRAN:* ${senatran}\n` +
+          `• *Categoria CNH:* ${cnh}\n` +
+          `• *Login / CPF:* ${assoc.document || 'Seu CPF'}\n` +
+          `• *Senha do Portal:* ${assoc.password || '(use os 6 primeiros dígitos do CPF)'}\n\n` +
+          `🪪 *Link de Validação da sua Carteira Digital com QR Code:*\n${validationUrl}\n\n` +
+          `🌐 *Portal do Associado:* ${origin}\n\n` +
+          `_Conte sempre com a Diretoria Executiva da AIAPE. Juntos somos mais fortes!_`;
+
       case 'general':
         return `Olá, Instrutor(a) *${assoc.name}*!\n\nTudo bem? Entramos em contato da *AIAPE (Associação dos Instrutores de Autoescolas de Pernambuco)*.\n\nComo podemos te ajudar hoje?`;
 
@@ -306,7 +321,7 @@ export function AssociateManagement({
 
   const openWhatsAppModal = (
     assoc: Associate,
-    template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption' = 'general'
+    template: 'general' | 'welcome' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption' = 'welcome'
   ) => {
     setWhatsAppModalAssociate(assoc);
     setWhatsAppPhone(assoc.phone || '');
@@ -315,7 +330,7 @@ export function AssociateManagement({
     setWhatsAppCopied(false);
   };
 
-  const handleSwitchWhatsAppTemplate = (template: 'general' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption') => {
+  const handleSwitchWhatsAppTemplate = (template: 'general' | 'welcome' | 'card' | 'payment_reminder' | 'password' | 'receipt' | 'exemption') => {
     if (!whatsAppModalAssociate) return;
     setWhatsAppTemplate(template);
     setWhatsAppCustomText(getWhatsAppTemplateMessage(whatsAppModalAssociate, template));
@@ -2379,7 +2394,20 @@ export function AssociateManagement({
                   <span>Escolha o Modelo de Mensagem:</span>
                   <span className="text-[10px] text-slate-400 font-normal">Pronto para 1-clique</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchWhatsAppTemplate('welcome')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all text-left flex items-center gap-1.5 cursor-pointer border ${
+                      whatsAppTemplate === 'welcome'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-xs'
+                        : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>🎉</span>
+                    <span className="truncate">Boas-Vindas</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => handleSwitchWhatsAppTemplate('general')}
