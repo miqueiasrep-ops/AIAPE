@@ -46,7 +46,8 @@ import {
   Heart,
   BadgePercent,
   Sparkles as SparklesIcon,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MapPin
 } from 'lucide-react';
 import { 
   Associate, 
@@ -895,6 +896,38 @@ export function AssociateManagement({
                               </span>
                             ) : null}
                             {assoc.document && <span>CPF: {assoc.document}</span>}
+                            {assoc.birthDate ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(assoc);
+                                }}
+                                title="Data de Nascimento (Clique para editar)"
+                                className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-1.5 py-0.5 rounded transition-colors"
+                              >
+                                <Gift className="w-2.5 h-2.5 text-amber-400" />
+                                <span>
+                                  Nasc: {(() => {
+                                    const parts = assoc.birthDate.split('-');
+                                    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                    return assoc.birthDate;
+                                  })()}
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(assoc);
+                                }}
+                                title="Definir Data de Nascimento em Editar Cadastro"
+                                className="inline-flex items-center gap-1 text-[9px] text-slate-500 hover:text-amber-400 transition-colors"
+                              >
+                                <Gift className="w-2.5 h-2.5" /> + Nascimento
+                              </button>
+                            )}
                             {assoc.phone ? (
                               <button
                                 type="button"
@@ -1176,15 +1209,80 @@ export function AssociateManagement({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">E-mail</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="associado@email.com"
-                    className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                      <Mail className="w-3.5 h-3.5 text-blue-400" />
+                      E-mail
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="associado@email.com"
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Gift className="w-3.5 h-3.5 text-amber-400" />
+                        Data de Nascimento
+                      </span>
+                      {formData.birthDate && (
+                        <span className="text-[10px] text-amber-400 font-semibold">
+                          {(() => {
+                            try {
+                              const parts = formData.birthDate.split('-');
+                              if (parts.length === 3) {
+                                const birthYear = parseInt(parts[0], 10);
+                                const currentYear = new Date().getFullYear();
+                                const age = currentYear - birthYear;
+                                return `${parts[2]}/${parts[1]}/${parts[0]} (${age} anos)`;
+                              }
+                            } catch (e) {}
+                            return '';
+                          })()}
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.birthDate}
+                      onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-amber-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                      Data de Filiação / Admissão
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.membershipDate}
+                      onChange={(e) => setFormData({ ...formData, membershipDate: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                      Endereço Completo / Cidade
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      placeholder="Ex: Rua das Flores, 123 - Recife/PE"
+                      className="w-full bg-slate-800 border border-slate-700 text-xs text-white px-3 py-2 rounded-lg focus:outline-hidden focus:border-blue-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -23,7 +23,8 @@ import {
   Edit3,
   Save,
   MessageCircle,
-  X
+  X,
+  Gift
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Associate, AssociationConfig } from '../types';
@@ -47,6 +48,7 @@ export function AssociateCard({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [editBirthDate, setEditBirthDate] = useState(associate.birthDate || '');
   const [editSenatran, setEditSenatran] = useState(associate.senatranCredential || '');
   const [editCnhCat, setEditCnhCat] = useState(associate.cnhCategory || 'AB');
   const [editRegNumber, setEditRegNumber] = useState(associate.registrationNumber || '');
@@ -56,6 +58,7 @@ export function AssociateCard({
 
   // Sync state when associate changes
   React.useEffect(() => {
+    setEditBirthDate(associate.birthDate || '');
     setEditSenatran(associate.senatranCredential || '');
     setEditCnhCat(associate.cnhCategory || 'AB');
     setEditRegNumber(associate.registrationNumber || '');
@@ -69,6 +72,7 @@ export function AssociateCard({
     try {
       const updated: Associate = {
         ...associate,
+        birthDate: editBirthDate.trim(),
         senatranCredential: editSenatran.trim(),
         cnhCategory: editCnhCat,
         registrationNumber: editRegNumber.trim(),
@@ -731,18 +735,33 @@ export function AssociateCard({
                   </div>
                 </div>
 
-                {/* Matrícula AIAPE */}
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-bold text-slate-300">
-                    Matrícula de Registro AIAPE
-                  </label>
-                  <input
-                    type="text"
-                    value={editRegNumber}
-                    onChange={(e) => setEditRegNumber(e.target.value)}
-                    placeholder="Ex: AIAPE-8421"
-                    className="w-full bg-slate-950 border border-slate-700 text-xs text-white px-3 py-2 rounded-xl focus:outline-hidden focus:border-blue-500 font-mono"
-                  />
+                {/* Matrícula AIAPE & Data de Nascimento */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-300">
+                      Matrícula AIAPE
+                    </label>
+                    <input
+                      type="text"
+                      value={editRegNumber}
+                      onChange={(e) => setEditRegNumber(e.target.value)}
+                      placeholder="Ex: AIAPE-8421"
+                      className="w-full bg-slate-950 border border-slate-700 text-xs text-white px-3 py-2 rounded-xl focus:outline-hidden focus:border-blue-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                      <Gift className="w-3 h-3 text-amber-400" />
+                      Nascimento
+                    </label>
+                    <input
+                      type="date"
+                      value={editBirthDate}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 text-xs text-white px-3 py-2 rounded-xl focus:outline-hidden focus:border-amber-500 cursor-pointer"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
