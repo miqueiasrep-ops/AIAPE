@@ -163,6 +163,7 @@ const INITIAL_CONFIG: AssociationConfig = {
   defaultMonthlyFee: 70,
   defaultDueDay: 30,
   primaryBank: 'Banco do Brasil',
+  pixKey: '8a0fa350-4511-4eab-a06f-6cc3bf44475c',
   financePin: '1234'
 };
 
@@ -242,6 +243,9 @@ export default function App() {
           }
           if (!parsed.defaultDueDay || parsed.defaultDueDay === 10) {
             parsed.defaultDueDay = 30;
+          }
+          if (!parsed.pixKey || parsed.pixKey === 'contato@aiape.org.br') {
+            parsed.pixKey = '8a0fa350-4511-4eab-a06f-6cc3bf44475c';
           }
           return parsed;
         }
@@ -547,9 +551,13 @@ export default function App() {
         const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data() as AssociationConfig;
+            if (!data.pixKey || data.pixKey === 'contato@aiape.org.br') {
+              data.pixKey = '8a0fa350-4511-4eab-a06f-6cc3bf44475c';
+            }
             setAssociationConfig(prev => ({
               ...prev,
-              ...data
+              ...data,
+              pixKey: data.pixKey || prev.pixKey || '8a0fa350-4511-4eab-a06f-6cc3bf44475c'
             }));
             safeSetLocalStorage('assoc_config', JSON.stringify(data));
           }

@@ -55,17 +55,31 @@ app.post('/api/extract', async (req, res) => {
     // Helper function to call a specific model
     const runModel = async (modelName: string) => {
       console.log(`Chamando modelo Gemini: ${modelName}`);
+      const imagePart = {
+        inlineData: {
+          data: fileData,
+          mimeType: mimeType,
+        },
+      };
+      const textPart = {
+        text: `Você é um assistente contábil especializado em ler comprovantes bancários brasileiros (PIX, TED, DOC, boleto bancário, recibo de transferência ou depósito).
+Analise este comprovante com atenção e extraia as informações de forma estruturada. Retorne os dados estritamente conforme o esquema JSON solicitado.
+Se algum campo não puder ser identificado com certeza, forneça um valor padrão adequado ("" ou 0).
+
+Orientações para os campos:
+- pagador: Nome completo do remetente, pagador, titular da conta ou cliente que fez a transferência/pagamento.
+- banco: Nome da instituição financeira emissora (ex: Nubank, Itaú, Bradesco, Banco do Brasil, Caixa Econômica, Santander, Inter, C6 Bank, PagBank, Mercado Pago, Sicredi, Sicoob, etc.).
+- valor: Valor numérico em Reais (ex: 35.00, 50.00, 70.00). Não incluir o símbolo R$.
+- data: Data em que o pagamento foi realizado no formato YYYY-MM-DD.
+- mes: Mês de competência ou do pagamento por extenso em português (ex: Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro).
+- tipo: Classificação do fluxo. Para mensalidades recebidas ou PIX de associados, use "receita". Para saídas, use "despesa".
+- categoria: Use "Mensalidades de Associados" para pagamentos de membros da associação, ou outra categoria adequada.
+- descricao: Breve descrição informativa (ex: "Comprovante PIX Mensalidade").`,
+      };
+
       return await ai.models.generateContent({
         model: modelName,
-        contents: [
-          {
-            inlineData: {
-              data: fileData,
-              mimeType: mimeType,
-            },
-          },
-          'Analise este comprovante bancário de transação/pagamento/recebimento e extraia as informações de forma estruturada. Retorne os dados estritamente conforme o esquema JSON solicitado. Se algum dado não puder ser extraído de forma alguma, forneça um valor padrão vazio ("") ou zero (0).',
-        ],
+        contents: { parts: [imagePart, textPart] },
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -93,15 +107,15 @@ app.post('/api/extract', async (req, res) => {
               },
               tipo: {
                 type: Type.STRING,
-                description: 'Classificação do fluxo: "despesa" (para pagamentos de boletos, pix enviado, transferências enviadas) ou "receita" (para pix recebido, transferências recebidas, salários).',
+                description: 'Classificação do fluxo: "despesa" ou "receita".',
               },
               categoria: {
                 type: Type.STRING,
-                description: 'Sugestão de categoria para a transação baseada no comprovante (ex: Alimentação, Aluguel / Habitação, Serviços / Utilities, Salário / Receitas, Impostos / Taxas, Transferência, Assinaturas, Lazer / Viagem, Suprimentos, Outros).',
+                description: 'Sugestão de categoria para a transação (ex: Mensalidades de Associados, Impostos / Taxas, Outros).',
               },
               descricao: {
                 type: Type.STRING,
-                description: 'Resumo breve do comprovante (ex: Transferência Pix, Pagamento de Boleto, Tarifa Bancária, etc.).',
+                description: 'Resumo breve do comprovante (ex: Transferência Pix, Pagamento de Mensalidade, etc.).',
               },
             },
             required: ['pagador', 'banco', 'valor', 'data', 'mes', 'tipo', 'categoria', 'descricao'],
@@ -110,23 +124,48 @@ app.post('/api/extract', async (req, res) => {
       });
     };
 
-    // Models to try in sequence for maximum reliability and speed
-    // 1. gemini-3.6-flash: default model, powerful and modern.
-    // 2. gemini-3.1-flash-lite: optimized light model with high availability.
-    // 3. gemini-flash-latest: stable flash alias as a highly available fallback.
-    const modelsToTry = ['gemini-3.6-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    // Models to try in sequence with automatic failover and resilience against 503 (high demand) / 429
+    const modelsToTry = [
+      'gemini-3.6-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-3.7-flash',
+      'gemini-flash-latest',
+      'gemini-3.1-pro-preview'
+    ];
+    
     let response;
     let lastError: any = null;
 
     for (const modelName of modelsToTry) {
-      try {
-        response = await runModel(modelName);
-        console.log(`Extração bem-sucedida usando o modelo: ${modelName}`);
+      // Try each model with up to 2 attempts if 503 or transient failure occurs
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          response = await runModel(modelName);
+          console.log(`Extração bem-sucedida usando o modelo: ${modelName} (tentativa ${attempt})`);
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const isUnavailable = err.status === 503 ||
+            err.code === 503 ||
+            err.message?.includes('503') ||
+            err.message?.includes('high demand') ||
+            err.message?.includes('UNAVAILABLE') ||
+            err.message?.includes('RESOURCE_EXHAUSTED');
+
+          console.warn(`Tentativa ${attempt} com o modelo ${modelName} falhou:`, err.message || err);
+
+          if (isUnavailable && attempt < 2) {
+            // Short backoff before retrying this model
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            continue;
+          }
+          // If still failing, move immediately to the next model in the cascade
+          break;
+        }
+      }
+
+      if (response) {
         break;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Tentativa com o modelo ${modelName} falhou:`, err.message || err);
-        // Fall back to the next model immediately without delays to ensure minimum latency
       }
     }
 
@@ -139,7 +178,14 @@ app.post('/api/extract', async (req, res) => {
       throw new Error('Nenhuma resposta de texto retornada pelo Gemini.');
     }
 
-    const data = JSON.parse(textOutput.trim());
+    let cleanJson = textOutput.trim();
+    if (cleanJson.startsWith('```json')) {
+      cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    const data = JSON.parse(cleanJson);
     return res.json(data);
   } catch (error: any) {
     console.error('Erro na extração do comprovante:', error);

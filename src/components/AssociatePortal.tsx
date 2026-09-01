@@ -29,6 +29,8 @@ import {
   Filter,
   Search,
   Check,
+  Copy,
+  Key,
   Building,
   KeyRound,
   Lock,
@@ -96,6 +98,15 @@ export function AssociatePortal({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [isSubmittingPass, setIsSubmittingPass] = useState(false);
+  const [pixKeyCopied, setPixKeyCopied] = useState(false);
+
+  const defaultPixKey = associationConfig.pixKey || '8a0fa350-4511-4eab-a06f-6cc3bf44475c';
+
+  const handleCopyPixKey = (keyToCopy: string) => {
+    navigator.clipboard.writeText(keyToCopy);
+    setPixKeyCopied(true);
+    setTimeout(() => setPixKeyCopied(false), 3000);
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -594,7 +605,7 @@ export function AssociatePortal({
               <PixPaymentCard
                 amount={associate.monthlyFee || 70}
                 associateName={associate.name}
-                pixKey={associationConfig.pixKey || 'contato@aiape.org.br'}
+                pixKey={defaultPixKey}
                 pixCopiaCola={associationConfig.pixCopiaCola}
                 pixQrCodeImageUrl={associationConfig.pixQrCodeImageUrl}
                 merchantName={associationConfig.name}
@@ -1138,7 +1149,7 @@ export function AssociatePortal({
               <PixPaymentCard
                 amount={associate.monthlyFee || 70}
                 associateName={associate.name}
-                pixKey={associationConfig.pixKey || 'contato@aiape.org.br'}
+                pixKey={defaultPixKey}
                 pixCopiaCola={associationConfig.pixCopiaCola}
                 pixQrCodeImageUrl={associationConfig.pixQrCodeImageUrl}
                 merchantName={associationConfig.name}
@@ -1183,6 +1194,38 @@ export function AssociatePortal({
 
               <div className="md:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4 shadow-xl">
                 <h3 className="text-sm font-extrabold text-white">Dados da Associação para Pagamento da Mensalidade</h3>
+                
+                {/* Chave PIX Direta com botão de cópia */}
+                <div className="bg-gradient-to-r from-emerald-950/60 via-slate-950 to-slate-950 border border-emerald-500/40 p-4 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-emerald-400 font-extrabold flex items-center gap-1.5">
+                      <Key className="w-4 h-4" />
+                      Chave PIX Oficial da AIAPE (Banco Central)
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2.5 py-0.5 rounded-full uppercase">
+                      Chave Aleatória / EVP
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="w-full bg-slate-950 border border-emerald-500/30 rounded-xl px-3 py-2 text-xs font-mono font-bold text-emerald-300 truncate select-all">
+                      {defaultPixKey}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPixKey(defaultPixKey)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-md ${
+                        pixKeyCopied
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      }`}
+                    >
+                      {pixKeyCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{pixKeyCopied ? 'Chave Copiada!' : 'Copiar Chave PIX'}</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs text-slate-300">
                   <p>• <strong>Favorecido:</strong> {associationConfig.name}</p>
                   <p>• <strong>Status Jurídico:</strong> Em processo de formalização e abertura</p>

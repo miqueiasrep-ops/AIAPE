@@ -15,7 +15,7 @@ export function sanitizeText(str: string, maxLength: number): string {
 }
 
 export function sanitizePixKey(key: string): string {
-  if (!key) return 'contato@aiape.org.br';
+  if (!key) return '8a0fa350-4511-4eab-a06f-6cc3bf44475c';
   const clean = key.trim();
   
   // Se for email

@@ -77,14 +77,14 @@ export default function ReceiptExtractor({
   // Helper function to match associate by name or document
   const findMatchingAssociate = (pagadorStr: string, descStr: string): Associate | null => {
     if (!associates || associates.length === 0) return null;
-    const combined = `${pagadorStr} ${descStr}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const combined = `${pagadorStr || ''} ${descStr || ''}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
     if (!combined) return null;
 
     for (const assoc of associates) {
-      const cleanName = assoc.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const cleanName = (assoc.name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       
       // Check full or partial string overlap
-      if (combined.includes(cleanName) || cleanName.includes(combined)) {
+      if (cleanName && (combined.includes(cleanName) || cleanName.includes(combined))) {
         return assoc;
       }
       
@@ -101,7 +101,7 @@ export default function ReceiptExtractor({
       // Check CPF/Document match
       if (assoc.document) {
         const cleanDoc = assoc.document.replace(/\D/g, '');
-        if (cleanDoc && cleanDoc.length >= 6 && combined.replace(/\D/g, '').includes(cleanDoc)) {
+        if (cleanDoc && cleanDoc.length >= 5 && combined.replace(/\D/g, '').includes(cleanDoc)) {
           return assoc;
         }
       }
@@ -138,14 +138,27 @@ export default function ReceiptExtractor({
 
   // Process and extract receipt
   const processFile = async (selectedFile: File) => {
+    let resolvedMime = selectedFile.type;
+    if (!resolvedMime || resolvedMime === 'application/octet-stream') {
+      const ext = selectedFile.name.split('.').pop()?.toLowerCase();
+      if (ext === 'jpg' || ext === 'jpeg') resolvedMime = 'image/jpeg';
+      else if (ext === 'png') resolvedMime = 'image/png';
+      else if (ext === 'webp') resolvedMime = 'image/webp';
+      else if (ext === 'pdf') resolvedMime = 'application/pdf';
+      else resolvedMime = 'image/jpeg';
+    }
+    if (resolvedMime === 'image/jpg') {
+      resolvedMime = 'image/jpeg';
+    }
+
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (!validTypes.includes(selectedFile.type)) {
-      setError('Formato inválido. Por favor, envie uma imagem (JPG, PNG) ou PDF.');
+    if (!validTypes.includes(resolvedMime) && !selectedFile.type.startsWith('image/')) {
+      setError('Formato não suportado. Por favor, envie uma imagem (JPG, PNG, WEBP) ou documento PDF.');
       return;
     }
 
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError('O arquivo excede o limite de 10MB.');
+    if (selectedFile.size > 15 * 1024 * 1024) {
+      setError('O arquivo excede o limite de 15MB.');
       return;
     }
 
@@ -173,14 +186,14 @@ export default function ReceiptExtractor({
             },
             body: JSON.stringify({
               fileData: base64Data,
-              mimeType: selectedFile.type,
+              mimeType: resolvedMime,
             }),
           });
 
           const result = await response.json();
 
           if (!response.ok) {
-            throw new Error(result.error || 'Erro na extração');
+            throw new Error(result.error || 'Erro na extração com IA');
           }
 
           let sanitizedDate = result.data;
@@ -208,14 +221,14 @@ export default function ReceiptExtractor({
           const matchedCategory = CATEGORIES.find(c => c.toLowerCase() === result.categoria?.toLowerCase()?.trim()) || 'Mensalidades de Associados';
 
           const finalExtraction: ExtractionResult = {
-            pagador: result.pagador || 'Desconhecido',
-            banco: result.banco || 'Outros',
+            pagador: result.pagador || '',
+            banco: result.banco || 'Nubank',
             valor: Number(result.valor) || 0,
             data: sanitizedDate || new Date().toISOString().split('T')[0],
             mes: capitalizedMonth,
             tipo: transType,
             categoria: matchedCategory,
-            descricao: result.descricao || 'Extraído via Comprovante PIX'
+            descricao: result.descricao || 'Comprovante PIX Mensalidade'
           };
 
           // Try matching associate automatically
@@ -235,7 +248,8 @@ export default function ReceiptExtractor({
           setEditedData(finalExtraction);
           setIsReviewing(true);
         } catch (err: any) {
-          setError(err.message || 'Houve um erro de comunicação com o servidor de IA.');
+          console.warn('Erro ao processar comprovante com IA:', err);
+          setError(err.message || 'Houve uma falha na leitura automática por IA.');
         } finally {
           setLoading(false);
         }
@@ -244,6 +258,26 @@ export default function ReceiptExtractor({
       setError('Não foi possível ler o arquivo. Tente novamente.');
       setLoading(false);
     }
+  };
+
+  const handleStartManualReview = () => {
+    const now = new Date();
+    const currentMonth = MONTH_NAMES[now.getMonth()];
+    const dateStr = now.toISOString().split('T')[0];
+    const fallbackData: ExtractionResult = {
+      pagador: '',
+      banco: 'Nubank',
+      valor: 0,
+      data: dateStr,
+      mes: currentMonth,
+      tipo: 'receita',
+      categoria: 'Mensalidades de Associados',
+      descricao: 'Comprovante PIX Mensalidade'
+    };
+    setExtraction(fallbackData);
+    setEditedData(fallbackData);
+    setIsReviewing(true);
+    setError(null);
   };
 
   const handleFieldChange = (field: keyof ExtractionResult, value: any) => {
@@ -434,12 +468,30 @@ export default function ReceiptExtractor({
             </div>
 
             {error && (
-              <div className="mt-3 bg-rose-50 border border-rose-200 p-3.5 rounded-xl flex items-start gap-2.5 text-xs text-rose-700">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Falha no Processamento</p>
-                  <p className="opacity-90">{error}</p>
+              <div className="mt-3 bg-rose-50 border border-rose-200 p-4 rounded-2xl flex flex-col gap-3 text-xs text-rose-800 shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-sm text-rose-900">Aviso na Leitura com IA</p>
+                    <p className="opacity-90 mt-0.5">{error}</p>
+                  </div>
                 </div>
+
+                {filePreviewUrl && (
+                  <div className="pt-2 border-t border-rose-200/80 flex flex-col sm:flex-row items-center justify-between gap-2">
+                    <span className="text-[11px] text-rose-700">
+                      O comprovante foi carregado! Você pode preencher os campos visualizando o comprovante:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleStartManualReview}
+                      className="w-full sm:w-auto px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Conferir & Preencher com esta Imagem</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             

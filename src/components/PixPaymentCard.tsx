@@ -19,7 +19,7 @@ interface PixPaymentCardProps {
 export function PixPaymentCard({
   amount = 70,
   associateName,
-  pixKey = 'contato@aiape.org.br',
+  pixKey = '8a0fa350-4511-4eab-a06f-6cc3bf44475c',
   pixCopiaCola = '',
   pixQrCodeImageUrl = '',
   merchantName = 'Alberto Cavalcanti Barbosa Junior',
@@ -28,7 +28,8 @@ export function PixPaymentCard({
   className = ''
 }: PixPaymentCardProps) {
   const [copied, setCopied] = useState(false);
-  const [currentPixKey, setCurrentPixKey] = useState(pixKey);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [currentPixKey, setCurrentPixKey] = useState(pixKey || '8a0fa350-4511-4eab-a06f-6cc3bf44475c');
   const [currentCopiaCola, setCurrentCopiaCola] = useState(pixCopiaCola);
   const [currentQrImage, setCurrentQrImage] = useState(pixQrCodeImageUrl);
   
@@ -36,13 +37,30 @@ export function PixPaymentCard({
   const [configTab, setConfigTab] = useState<'copiaCola' | 'chave' | 'imagem'>('copiaCola');
 
   const [inputCopiaCola, setInputCopiaCola] = useState(pixCopiaCola);
-  const [inputKey, setInputKey] = useState(pixKey);
+  const [inputKey, setInputKey] = useState(pixKey || '8a0fa350-4511-4eab-a06f-6cc3bf44475c');
+
+  // Keep state in sync with props
+  React.useEffect(() => {
+    if (pixKey) {
+      setCurrentPixKey(pixKey);
+      setInputKey(pixKey);
+    }
+    if (pixCopiaCola !== undefined) {
+      setCurrentCopiaCola(pixCopiaCola);
+      setInputCopiaCola(pixCopiaCola);
+    }
+    if (pixQrCodeImageUrl !== undefined) {
+      setCurrentQrImage(pixQrCodeImageUrl);
+    }
+  }, [pixKey, pixCopiaCola, pixQrCodeImageUrl]);
+
+  const activePixKey = currentPixKey || pixKey || '8a0fa350-4511-4eab-a06f-6cc3bf44475c';
 
   // Determinar qual é o payload final do PIX
   const effectivePayload = currentCopiaCola.trim().startsWith('000201')
     ? currentCopiaCola.trim()
     : generatePixPayload({
-        pixKey: currentPixKey,
+        pixKey: activePixKey,
         merchantName,
         merchantCity,
         amount,
@@ -54,6 +72,12 @@ export function PixPaymentCard({
     navigator.clipboard.writeText(effectivePayload);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleCopyKey = () => {
+    navigator.clipboard.writeText(activePixKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 3000);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,26 +332,52 @@ export function PixPaymentCard({
               )}
             </div>
 
+            {/* Direct PIX Key box under QR Code */}
+            <div className="bg-slate-100/90 border border-slate-200 p-2.5 rounded-2xl text-left space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                <span>Chave PIX Oficial (EVP):</span>
+                <span className="text-emerald-700 font-extrabold">Banco Central</span>
+              </div>
+              <div className="flex items-center justify-between gap-1.5 bg-white p-2 rounded-xl border border-slate-200">
+                <span className="font-mono text-xs font-black text-slate-900 break-all select-all tracking-tight">
+                  {activePixKey}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyKey}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0 flex items-center gap-1 transition-all cursor-pointer shadow-sm ${
+                    copiedKey
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-[#009EE3] hover:bg-[#0082C5] text-white'
+                  }`}
+                  title="Copiar Chave PIX"
+                >
+                  {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey ? 'Copiada!' : 'Copiar'}</span>
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-1 pt-1">
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                currentCopiaCola || (currentPixKey && currentPixKey !== 'contato@aiape.org.br')
+                currentCopiaCola || (activePixKey && activePixKey !== 'contato@aiape.org.br')
                   ? 'bg-emerald-100 text-emerald-800'
                   : 'bg-amber-100 text-amber-800'
               }`}>
-                {currentCopiaCola || (currentPixKey && currentPixKey !== 'contato@aiape.org.br')
+                {currentCopiaCola || (activePixKey && activePixKey !== 'contato@aiape.org.br')
                   ? '✓ QR Code PIX Ativo'
                   : '⚠️ Chave Demonstrativa'}
               </span>
               <p className="text-[11px] text-slate-500 font-semibold pt-1">
-                Aponte a câmera do aplicativo do seu banco para pagar instantaneamente
+                Aponte a câmera do app do banco ou use as opções de cópia ao lado
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right side: Instructions & Pix Copia e Cola */}
+        {/* Right side: Instructions & Pix Copia e Cola / Direct Key */}
         <div className="md:col-span-7 space-y-5">
-          {(!currentCopiaCola && currentPixKey === 'contato@aiape.org.br') && (
+          {(!currentCopiaCola && activePixKey === 'contato@aiape.org.br') && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-amber-200 space-y-2">
               <div className="flex items-center gap-2 text-amber-300 font-bold">
                 <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -351,68 +401,62 @@ export function PixPaymentCard({
               </div>
             </div>
           )}
-          <div className="space-y-3">
-            <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-blue-400" />
-              Como realizar o pagamento:
-            </h4>
-            <ol className="space-y-2 text-xs text-slate-300">
-              <li className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0 text-[11px]">1</span>
-                <span>Abra o aplicativo do seu banco ou instituição financeira.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0 text-[11px]">2</span>
-                <span>Escolha a opção <strong>PIX</strong> e selecione <strong>PIX Copia e Cola</strong>.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0 text-[11px]">3</span>
-                <span>Cole o código do campo abaixo no seu aplicativo bancário.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center shrink-0 text-[11px]">4</span>
-                <span>Confirme o valor de <strong>R$ {amount.toFixed(2).replace('.', ',')}</strong> e o recebedor <strong>{merchantName}</strong>.</span>
-              </li>
-            </ol>
-          </div>
 
-          {/* Pix Copia e Cola Input Field */}
-          <div className="space-y-2 pt-2">
-            <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-              <span>Código PIX Copia e Cola Oficial:</span>
-              <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                {currentCopiaCola ? 'PIX Mercado Pago Ativo' : `Chave: ${currentPixKey}`}
+          {/* Section: Chave PIX Oficial (Aleatória / EVP) */}
+          <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border-2 border-emerald-500/40 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-400 font-extrabold text-sm">
+                <Key className="w-4 h-4" />
+                <span>Chave PIX Oficial da AIAPE</span>
+              </div>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Chave Aleatória (EVP)
               </span>
-            </label>
+            </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={effectivePayload}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 font-mono truncate select-all focus:outline-none focus:border-blue-500"
-              />
+            <p className="text-xs text-slate-300">
+              No app do seu banco, escolha <strong>Transferir via PIX</strong> &gt; <strong>Chave Aleatória</strong> e cole a chave abaixo:
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="w-full bg-slate-950 border border-emerald-500/30 rounded-xl px-3.5 py-2.5 text-xs text-emerald-300 font-mono font-bold truncate select-all">
+                {activePixKey}
+              </div>
               <button
-                onClick={handleCopy}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                  copied 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20'
+                type="button"
+                onClick={handleCopyKey}
+                className={`px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0 shadow-lg ${
+                  copiedKey 
+                    ? 'bg-emerald-500 text-white shadow-emerald-500/30' 
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
                 }`}
               >
-                {copied ? (
+                {copiedKey ? (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Copiado!</span>
+                    <span>Chave Copiada!</span>
                   </>
                 ) : (
                   <>
                     <Copy className="w-4 h-4" />
-                    <span>Copiar PIX</span>
+                    <span>Copiar Chave PIX</span>
                   </>
                 )}
               </button>
             </div>
+          </div>
+
+          <div className="space-y-2 bg-slate-950/50 p-4 rounded-2xl border border-slate-800/80">
+            <h4 className="text-xs font-bold text-slate-300 flex items-center gap-2">
+              <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+              Instruções de pagamento & conferência:
+            </h4>
+            <ul className="text-xs text-slate-300 space-y-1.5 pt-1">
+              <li>• <strong>Chave PIX:</strong> <span className="font-mono text-emerald-400 select-all">{activePixKey}</span></li>
+              <li>• <strong>Favorecido / Recebedor:</strong> {merchantName} (AIAPE)</li>
+              <li>• <strong>Valor da Mensalidade:</strong> R$ {amount.toFixed(2).replace('.', ',')}</li>
+              <li>• <strong>Cidade:</strong> {merchantCity} - PE</li>
+            </ul>
           </div>
 
           {/* Action to submit receipt directly */}
