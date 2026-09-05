@@ -64,6 +64,7 @@ import {
 import ReceiptExtractor from './ReceiptExtractor';
 import { AssociateCard } from './AssociateCard';
 import { AssociateImportModal } from './AssociateImportModal';
+import { AssociatePdfModal } from './AssociatePdfModal';
 
 interface AssociateManagementProps {
   associates: Associate[];
@@ -104,6 +105,9 @@ export function AssociateManagement({
 
   // Import Excel/Forms Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // PDF Export Report Modal State
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // Requests Modal State
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
@@ -671,6 +675,15 @@ export function AssociateManagement({
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setIsPdfModalOpen(true)}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+            title="Baixar Relatório Oficial dos Associados em PDF com a Logo"
+          >
+            <FileText className="w-4 h-4 text-white" />
+            <span>Baixar Relatório em PDF</span>
+          </button>
+
+          <button
             onClick={() => setIsImportModalOpen(true)}
             className="flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
             title="Importar planilha do Excel (.xlsx, .csv) ou respostas do Google Forms"
@@ -818,6 +831,15 @@ export function AssociateManagement({
             <option value="Estudante / Especial">Estudante / Especial</option>
             <option value="Voluntário">Voluntário</option>
           </select>
+
+          <button
+            onClick={() => setIsPdfModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-rose-300 hover:text-white text-xs font-semibold rounded-lg border border-slate-700 hover:border-rose-500/40 transition-colors cursor-pointer whitespace-nowrap"
+            title="Exportar registros em PDF com a Logo"
+          >
+            <FileText className="w-3.5 h-3.5 text-rose-400" />
+            <span>PDF com Logo</span>
+          </button>
         </div>
       </div>
 
@@ -2651,6 +2673,18 @@ export function AssociateManagement({
           </div>
         )}
       </AnimatePresence>
+
+      {/* PDF Export Modal com Logo Oficial */}
+      <AssociatePdfModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        associates={associates}
+        filteredAssociates={filteredAssociates}
+        config={associationConfig}
+        currentStatusFilter={statusFilter}
+        currentCategoryFilter={categoryFilter}
+        currentSearchTerm={searchTerm}
+      />
     </div>
   );
 }

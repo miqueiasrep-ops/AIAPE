@@ -44,6 +44,32 @@ export const auth = getAuth(app);
 // Initialize Firestore with custom Database ID
 export const db = initializeFirestore(app, {}, DATABASE_ID);
 
+/**
+ * Recursively removes all `undefined` values from an object or nested structure.
+ * Firestore strictly rejects documents with `undefined` values.
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined || typeof data !== 'object') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter(item => item !== undefined)
+      .map(item => cleanForFirestore(item)) as unknown as T;
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data as Record<string, any>)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object') {
+        clean[key] = cleanForFirestore(value);
+      } else {
+        clean[key] = value;
+      }
+    }
+  }
+  return clean as T;
+}
+
 export { 
   signInAnonymously, 
   signInWithEmailAndPassword, 

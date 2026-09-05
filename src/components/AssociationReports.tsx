@@ -12,6 +12,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { Transaction, Associate, AssociationConfig, MONTH_NAMES } from '../types';
+import { AssociatePdfModal } from './AssociatePdfModal';
 
 interface AssociationReportsProps {
   transactions: Transaction[];
@@ -27,6 +28,7 @@ export function AssociationReports({
   selectedCompetence
 }: AssociationReportsProps) {
   const [reportType, setReportType] = useState<'dre' | 'inadimplencia' | 'balancete'>('dre');
+  const [isAssociatesPdfModalOpen, setIsAssociatesPdfModalOpen] = useState(false);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -109,6 +111,15 @@ export function AssociationReports({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setIsAssociatesPdfModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+            title="Baixar Relatório Oficial dos Associados em PDF com a Logo"
+          >
+            <FileText className="w-4 h-4 text-white" />
+            PDF dos Associados
+          </button>
+
+          <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer"
           >
@@ -148,6 +159,15 @@ export function AssociationReports({
           }`}
         >
           Relatório de Inadimplência
+        </button>
+
+        <button
+          onClick={() => setIsAssociatesPdfModalOpen(true)}
+          className="px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer bg-slate-800/60 text-rose-300 hover:text-white border border-slate-700 hover:border-rose-500/40 flex items-center gap-1.5"
+          title="Emitir e baixar relatório oficial de associados em PDF com a logo oficial"
+        >
+          <FileText className="w-3.5 h-3.5 text-rose-400" />
+          <span>Baixar PDF de Associados (com Logo)</span>
         </button>
       </div>
 
@@ -316,6 +336,15 @@ export function AssociationReports({
           </div>
         </div>
       )}
+
+      {/* PDF Export Modal com Logo Oficial */}
+      <AssociatePdfModal
+        isOpen={isAssociatesPdfModalOpen}
+        onClose={() => setIsAssociatesPdfModalOpen(false)}
+        associates={associates}
+        filteredAssociates={associates}
+        config={associationConfig}
+      />
     </div>
   );
 }

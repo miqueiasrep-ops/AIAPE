@@ -78,6 +78,7 @@ import {
   updateDoc,
   onSnapshot,
   writeBatch,
+  cleanForFirestore,
   FirebaseUser
 } from './firebase';
 
@@ -289,14 +290,22 @@ export default function App() {
     safeSetLocalStorage('assoc_requests', JSON.stringify(associateRequests));
   }, [associateRequests]);
 
-  const handleCreateRequest = (req: Omit<AssociateRequest, 'id' | 'date' | 'status'>) => {
+  const handleCreateRequest = async (req: Omit<AssociateRequest, 'id' | 'date' | 'status'>) => {
+    const reqId = `req-${Date.now()}`;
     const newReq: AssociateRequest = {
       ...req,
-      id: `req-${Date.now()}`,
+      id: reqId,
       date: new Date().toISOString().split('T')[0],
       status: 'pendente'
     };
     setAssociateRequests(prev => [newReq, ...prev]);
+    safeSetLocalStorage('assoc_requests', JSON.stringify([newReq, ...associateRequests]));
+    try {
+      await setDoc(doc(db, 'requests', reqId), cleanForFirestore(newReq));
+    } catch (err) {
+      console.error('Erro ao salvar solicitação no Firestore:', err);
+      handleFirebaseError(err);
+    }
   };
 
   const [currentTime, setCurrentTime] = useState('');
@@ -610,7 +619,7 @@ export default function App() {
     // Persist to shared cloud Firestore
     setSyncStatus('sincronizando');
     try {
-      await setDoc(doc(db, 'transactions', txId), tx);
+      await setDoc(doc(db, 'transactions', txId), cleanForFirestore(tx));
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao salvar transação no Firestore:', err);
@@ -634,9 +643,9 @@ export default function App() {
 
     setSyncStatus('sincronizando');
     try {
-      await updateDoc(doc(db, 'transactions', id), {
+      await updateDoc(doc(db, 'transactions', id), cleanForFirestore({
         status: nextStatus
-      });
+      }));
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
@@ -682,7 +691,7 @@ export default function App() {
     // Save to Firestore Cloud so notebook and all devices see it immediately
     setSyncStatus('sincronizando');
     try {
-      await setDoc(doc(db, 'associates', newAssoc.id), sanitized, { merge: true });
+      await setDoc(doc(db, 'associates', newAssoc.id), cleanForFirestore(sanitized), { merge: true });
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao salvar associado no Firestore:', err);
@@ -705,7 +714,7 @@ export default function App() {
 
     setSyncStatus('sincronizando');
     try {
-      await setDoc(doc(db, 'associates', updatedAssoc.id), sanitized, { merge: true });
+      await setDoc(doc(db, 'associates', updatedAssoc.id), cleanForFirestore(sanitized), { merge: true });
       setSyncStatus('sincronizado');
     } catch (err) {
       console.error('Erro ao atualizar associado no Firestore:', err);
@@ -778,7 +787,7 @@ export default function App() {
         const chunk = itemsToWrite.slice(i, i + CHUNK_SIZE);
         const batch = writeBatch(db);
         chunk.forEach(item => {
-          batch.set(doc(db, 'associates', item.id), item.data, { merge: true });
+          batch.set(doc(db, 'associates', item.id), cleanForFirestore(item.data), { merge: true });
         });
         await batch.commit();
       }
@@ -811,7 +820,7 @@ export default function App() {
             const batch = writeBatch(db);
             chunk.forEach(a => {
               if (a && a.id) {
-                batch.set(doc(db, 'associates', a.id), sanitizeAssociateForFirestore(a), { merge: true });
+                batch.set(doc(db, 'associates', a.id), cleanForFirestore(sanitizeAssociateForFirestore(a)), { merge: true });
                 assocCount++;
               }
             });
@@ -831,7 +840,7 @@ export default function App() {
             const batch = writeBatch(db);
             chunk.forEach(t => {
               if (t && t.id) {
-                batch.set(doc(db, 'transactions', t.id), t, { merge: true });
+                batch.set(doc(db, 'transactions', t.id), cleanForFirestore(t), { merge: true });
                 txCount++;
               }
             });
@@ -848,7 +857,7 @@ export default function App() {
           const batch = writeBatch(db);
           parsed.forEach(ev => {
             if (ev && ev.id) {
-              batch.set(doc(db, 'events', ev.id), ev, { merge: true });
+              batch.set(doc(db, 'events', ev.id), cleanForFirestore(ev), { merge: true });
               eventCount++;
             }
           });
@@ -864,7 +873,7 @@ export default function App() {
           const batch = writeBatch(db);
           parsed.forEach(req => {
             if (req && req.id) {
-              batch.set(doc(db, 'requests', req.id), req, { merge: true });
+              batch.set(doc(db, 'requests', req.id), cleanForFirestore(req), { merge: true });
               reqCount++;
             }
           });
@@ -876,7 +885,7 @@ export default function App() {
       const localCfg = safeGetLocalStorage('assoc_config');
       if (localCfg) {
         const parsed = JSON.parse(localCfg);
-        await setDoc(doc(db, 'config', 'association'), parsed, { merge: true });
+        await setDoc(doc(db, 'config', 'association'), cleanForFirestore(parsed), { merge: true });
       }
 
       setSyncStatus('sincronizado');
@@ -936,7 +945,7 @@ export default function App() {
     safeSetLocalStorage('assoc_events', JSON.stringify([newEvent, ...events]));
 
     try {
-      await setDoc(doc(db, 'events', newEvent.id), newEvent);
+      await setDoc(doc(db, 'events', newEvent.id), cleanForFirestore(newEvent));
     } catch (err) {
       console.error('Erro ao salvar evento:', err);
       handleFirebaseError(err);
@@ -946,7 +955,7 @@ export default function App() {
   const handleUpdateEvent = async (updatedEvent: AssociationEvent) => {
     setEvents(events.map(ev => ev.id === updatedEvent.id ? updatedEvent : ev));
     try {
-      await setDoc(doc(db, 'events', updatedEvent.id), updatedEvent, { merge: true });
+      await setDoc(doc(db, 'events', updatedEvent.id), cleanForFirestore(updatedEvent), { merge: true });
     } catch (err) {
       console.error('Erro ao atualizar evento:', err);
       handleFirebaseError(err);
@@ -970,10 +979,10 @@ export default function App() {
     safeSetLocalStorage('assoc_requests', JSON.stringify(updated));
 
     try {
-      await updateDoc(doc(db, 'requests', id), {
+      await updateDoc(doc(db, 'requests', id), cleanForFirestore({
         status,
         adminNote: note || ''
-      });
+      }));
     } catch (err) {
       console.error('Erro ao atualizar solicitação no Firestore:', err);
       handleFirebaseError(err);
@@ -985,7 +994,7 @@ export default function App() {
     setAssociationConfig(newConfig);
     safeSetLocalStorage('assoc_config', JSON.stringify(newConfig));
     try {
-      await setDoc(doc(db, 'config', 'association'), newConfig, { merge: true });
+      await setDoc(doc(db, 'config', 'association'), cleanForFirestore(newConfig), { merge: true });
     } catch (err) {
       console.error('Erro ao salvar configuração no Firestore:', err);
       handleFirebaseError(err);

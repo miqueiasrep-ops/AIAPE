@@ -52,6 +52,7 @@ export default function ReceiptExtractor({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   
   // State for extracted data review
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
@@ -246,6 +247,7 @@ export default function ReceiptExtractor({
 
           setExtraction(finalExtraction);
           setEditedData(finalExtraction);
+          setFallbackNotice(result.fallbackNotice || null);
           setIsReviewing(true);
         } catch (err: any) {
           console.warn('Erro ao processar comprovante com IA:', err);
@@ -555,6 +557,15 @@ export default function ReceiptExtractor({
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
+            {fallbackNotice && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-center gap-2.5 shadow-xs">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                <p>
+                  <strong>Modo de Conferência Direta:</strong> {fallbackNotice}
+                </p>
+              </div>
+            )}
+
             {/* VISUAL RECEIPT IMAGE PREVIEW FOR CONFERÊNCIA */}
             <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 text-white shadow-lg overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
